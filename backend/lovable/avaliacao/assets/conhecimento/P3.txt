@@ -1,0 +1,36 @@
+# P3 — REGISTRO DE DECISÕES
+Projeto João de Barro — Alan Soares da Silva
+
+Tipos: CP = correção pontual | PR = preferência de redação | PM = padrão de modalidade | RG = regra geral | RN = requisito normativo
+
+| ID | Data | Laudo / origem | Decisão do Alan | Regra resultante | Tipo | Escopo | Status |
+|---|---|---|---|---|---|---|---|
+| D-000 | 18/10/2026 | Montagem do projeto | Laudos Beltrana (A1) e ISO (A2) são o padrão oficial; Jaó (H1) e Coimbra (H2) ficam só para comparação | Seguir A1/A2 em estrutura, estilo e método | RG | Todos os laudos | Aprovada |
+| D-001 | 18/10/2026 | Matriz de normas (P4) | Remover a Resolução COFECI 957/2006 (revogada pela 1.066/2007) | Citar apenas Lei 6.530/78 e Res. COFECI 1.066/2007 | RN | Todos os laudos | Aprovada |
+| D-002 | 18/10/2026 | Modelo-mestre (P1) | Inscrição do avaliador: CRECI 5ª Região – GO, nº 36507; CNAI nº 53569 | Texto fixo no item 3 (Competência) | PR | Todos os laudos | Aprovada |
+| D-003 | 18/10/2026 | Modelo-mestre (P1) | Validade do parecer: 90 (noventa) dias da emissão | Texto fixo no item 13 (Pressupostos) | RG | Todos os laudos | Aprovada |
+| D-004 | 18/10/2026 | Modelo-mestre (P1) | Aprovado o modelo-mestre V2 com nova numeração (itens 1–18), capa com foto demarcada em vermelho, documentação analisada, diagnóstico de mercado, tratamento estatístico, pressupostos, declarações e anexos Ross-Heidecke/Vida Útil embutidos | P1 substitui a estrutura da seção 4 das Instruções; P1 prevalece sobre A1/A2 em estrutura | PM | Todos os PTAMs | Aprovada |
+| D-005 | 18/10/2026 | Matriz de normas (P4) | Citar "ABNT NBR 14653-1:2019" sem número de item até conferência no texto oficial | Nunca citar número de item não conferido | RN | Todos os laudos | Substituída pela D-008 |
+| D-006 | 18/10/2026 | Matriz de modalidades (P7) | A vedação de uso judicial/garantia dos laudos A1 e A2 é correta para a finalidade deles (venda); não é regra geral | O texto da limitação de uso muda por modalidade conforme a P7 | PM | Todos os laudos | Aprovada |
+| D-007 | 18/10/2026 | Matriz de modalidades (P7) | O Alan é Perito Avaliador qualificado para determinar valor de mercado em qualquer finalidade (venda, garantia, judicial); laudo de engenharia tem objeto diferente | Não tratar a competência como fragilidade; no AMJ, reforçar a qualificação do perito e declarar fora do escopo apenas temas de engenharia | RG | Todos os laudos | Aprovada |
+| D-008 | 18/10/2026 | Matriz de normas (P4) | A NBR 14653-1:2019 excluiu a definição de "parecer técnico"; o "item 3.34" é da edição 2001 | Item 4 reescrito no P1: PTAM com base na Res. COFECI 1.066/2007 e Ato 001/2011; NBR 14653-1:2019 só como referência técnica, sem grau de fundamentação. Proibido citar item 3.34 | RN | Todos os laudos | Aprovada |
+| D-009 | 18/10/2026 | Modelo-mestre (P1) | Alan não vai anexar certificados | Anexo de currículo usa apenas a identificação e o currículo resumido; no AMJ, qualificação descrita em texto, sem comprovantes anexos | PR | Todos os laudos | Aprovada |
+| D-010 | 19/10/2026 | OV das Acácias Qd.12 Lt.07 – Jd. Vila Boa | Referenciais devem ter a mesma tipologia, padrão construtivo e idade/estado do avaliando; descartados casa térrea de renda com anexos, lote com duas casas, sobrado novo, padrão superior (planejados, piscina, sauna) | Prioridade: mesma tipologia + padrão + estado. Tipos diferentes só se não houver 5 amostras semelhantes, e então com homogenização justificada. Lote/área parecida ou mesma rua não bastam para recomendar amostra | RG | Todos os laudos | Aprovada |
+| D-011 | 19/10/2026 | OV nº 120 – Jd. Vila Boa | OV não é PTAM: título "Opinião Profissional de Valor N.º X", sem a palavra PTAM | Capa, cabeçalho e item 2 usam "Opinião Profissional de Valor N.º" | PM | Todas as OV | Aprovada |
+| D-012 | 19/10/2026 | OV nº 120 | Não escrever "sem inspeção de engenharia" nem pressuposto de ensaios/engenharia | Remover essas frases do item 7.4 e dos pressupostos | PR | Todos os laudos | Aprovada |
+| D-013 | 19/10/2026 | OV nº 120 | Trabalhar com os dados documentais (IPTU/matrícula); não registrar informações verbais do contratante no laudo (áreas, ano, reforma, venda de vizinho) | Item 7 e pressupostos só com dado documental ou observado em vistoria | RG | Todos os laudos | Aprovada |
+| D-014 | 19/10/2026 | OV nº 120 | Tabela de amostras no padrão do A1: "Localização" em negrito, link clicável, descrição com espaço, foto principal inteira com valor abaixo; amostra sem lote informado = "n/i" | Seguir esse layout no item de amostras | PR | Todos os laudos | Aprovada |
+| D-015 | 19/10/2026 | OV nº 120 | Todos os laudos levam Anexos Ross-Heidecke, Vida Útil e currículo + contato, inclusive OV; prints dos referenciais NÃO vão nos anexos | Aplicado na P7 V02 | PM | Todos os laudos | Aprovada |
+| D-016 | 19/10/2026 | OV nº 120 | Localização sempre com imagem do Google Maps/Earth demarcada e link clicável | Item 7.1 obrigatório com mapa | RG | Todos os laudos | Aprovada |
+| D-017 | 19/10/2026 | OV nº 120 | Documentação analisada só com documentos usados (não citar documento descartado, ex.: planta de outro imóvel) | Item 6 lista apenas o que embasou o laudo | PR | Todos os laudos | Aprovada |
+| D-018 | 19/10/2026 | OV nº 120 | Bloco do valor como no A1: "VALOR DE MERCADO ADOTADO", valor em fonte grande, extenso abaixo, faixa ± em negrito e valores mínimo/máximo destacados | Seguir no item de determinação do valor | PR | Todos os laudos | Aprovada |
+| D-019 | 19/10/2026 | OV nº 120 | Sumário obrigatório, no final, com links clicáveis para as seções | Sempre gerar sumário clicável | PR | Todos os laudos | Aprovada |
+| D-020 | 19/10/2026 | OV nº 120 | Nome do arquivo final: "Nº - Cliente - Tipo do imóvel - Bairro/Condomínio - Cidade" (ex.: "01 - Carlos - Lote - Condomínio Mansões Morumbi - Senador Canedo") | Substitui o padrão AAAA-MM-DD_CLIENTE_TIPO_LOCAL_V01 | RG | Todos os laudos | Aprovada |
+| D-021 | 19/10/2026 | Melhoria do projeto | Referenciais: comparar quartos, tipologia, setor, lote, área construída, tipo de construção, idade aparente e o que mais houver; mínimo 5; se não houver 5 semelhantes, completar com menos semelhantes | Complementa a D-010; lista de candidatos traz colunas de tipologia e quartos | RG | Todos os laudos | Aprovada |
+| D-022 | 19/10/2026 | Melhoria do projeto | Legendas das fotos: o agente deduz pela imagem; o Alan corrige na revisão | Não pedir legenda foto a foto | PR | Todos os laudos | Aprovada |
+| D-023 | 19/10/2026 | Melhoria do projeto | Contato fixo sem e-mail: (62) 9 9306-8692, avaliadordeimovel.com, Instagram @alansoares_corretor | Anexo de currículo com telefone, site e Instagram | PR | Todos os laudos | Aprovada |
+| D-024 | 19/10/2026 | Melhoria do projeto | Usar só o Chrome do Alan e só computador confirmado por ele | Nunca acessar pasta ou máquina de terceiros | RG | Todos os trabalhos | Aprovada |
+
+## Pendências abertas
+- Alan colar o P0 V2 nas Instruções do Projeto.
+- P5 (formulário de abertura + checklist de vistoria), skill do gerador, P1-OV / P1-AM-AMJ, P6, P2 e P8.

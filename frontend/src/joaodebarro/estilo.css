@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --barro: #a5522b;
+  --barro-esc: #8a4222;
+  --barro-claro: #fbf1e9;
+  --fundo: #f6f3ee;
+  color-scheme: light;
+}
+
+@layer base {
+  html, body {
+    background: var(--fundo);
+    color: #292524;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  h1, h2, h3 { letter-spacing: -0.011em; }
+  ::selection { background: #f3d9c6; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white
+           shadow-sm transition-colors disabled:opacity-60 disabled:shadow-none;
+    background: var(--barro);
+  }
+  .btn:hover:not(:disabled) { background: var(--barro-esc); }
+  .btn:active:not(:disabled) { transform: translateY(0.5px); }
+  .btn-sec {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 py-2.5
+           text-sm font-semibold text-stone-700 shadow-sm transition-colors hover:border-stone-400 hover:bg-stone-50
+           disabled:opacity-60 disabled:shadow-none;
+  }
+  .btn-peq { @apply px-3 py-1.5 text-xs; }
+  .btn-link { @apply rounded px-2 py-1 text-sm font-medium hover:underline; color: var(--barro); }
+  .btn:focus-visible, .btn-sec:focus-visible, .btn-link:focus-visible, .input:focus-visible, .foco:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--barro);
+    outline-offset: 2px;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900
+           transition-shadow placeholder:text-stone-400 disabled:bg-stone-100 disabled:text-stone-500;
+  }
+  .input:focus { border-color: var(--barro); box-shadow: 0 0 0 3px rgb(165 82 43 / 0.14); }
+  .input-erro { @apply border-red-400; }
+  .rotulo { @apply mb-1 block text-sm font-medium text-stone-700; }
+  .ajuda { @apply mt-1 text-xs text-stone-500; }
+  .erro-txt { @apply mt-1 text-sm text-red-700; }
+
+  .cartao {
+    @apply rounded-xl border border-stone-200 bg-white;
+    box-shadow: 0 1px 2px rgb(41 37 36 / 0.04), 0 1px 1px rgb(41 37 36 / 0.03);
+  }
+  .cartao-pad { @apply cartao p-4 sm:p-5; }
+  .titulo-sec { @apply text-base font-semibold text-stone-900; }
+  .titulo-pag { @apply text-xl font-semibold text-stone-900 sm:text-2xl; }
+  .sobre { @apply text-xs font-semibold uppercase tracking-wider text-stone-500; }
+
+  .chip { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset; }
+  .tabela { @apply w-full text-left text-sm; }
+  .tabela th { @apply whitespace-nowrap border-b border-stone-200 bg-stone-50/70 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500; }
+  .tabela td { @apply border-b border-stone-100 px-3 py-3 align-top; }
+  .tabela tr:last-child td { @apply border-b-0; }
+
+  .faixa { @apply rounded-xl border px-4 py-3 text-sm; }
+  .faixa-erro { @apply faixa border-red-200 bg-red-50 text-red-800; }
+  .faixa-aviso { @apply faixa border-amber-200 bg-amber-50 text-amber-900; }
+  .faixa-info { @apply faixa border-sky-200 bg-sky-50 text-sky-900; }
+
+  /* Esqueleto de carregamento. */
+  .osso {
+    @apply rounded bg-stone-200/80;
+    animation: jdb-pulso 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes jdb-pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes jdb-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.entra { animation: jdb-entra 0.18s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .osso, .entra, .animate-spin, .animate-pulse { animation: none !important; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* Celular: alvos de toque ≥ 44 px (WCAG 2.5.5) e campos a 16 px (sem zoom automático no iOS). */
+@media (max-width: 639px) {
+  .btn, .btn-sec, .btn-link, .toque, nav[aria-label="Principal"] button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .input { min-height: 44px; font-size: 16px; }
+}
+
+@layer utilities {
+  .text-barro { color: var(--barro); }
+  .bg-barro { background: var(--barro); }
+  .bg-barro-claro { background: var(--barro-claro); }
+  .border-barro { border-color: var(--barro); }
+}
+
+@media print {
+  header, nav, .nao-imprime { display: none !important; }
+  html, body { background: #fff; }
+}
