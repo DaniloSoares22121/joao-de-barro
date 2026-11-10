@@ -50,12 +50,15 @@ def test_sem_dono_configurado_403(client):
     assert client.get("/api/avaliacao/jobs", headers=_h(DONO)).status_code == 403
 
 
-def test_admin_define_dono(client):
-    adm = {"X-Admin-Token": auth.admin_make_token()}
-    r = client.put("/api/admin/avaliacao/dono", json={"email": DONO}, headers=adm)
+def test_login_e_criacao_do_avaliador(client):
+    """O avaliador é criado pelo criar_usuario.py; login errado é 401, certo devolve token."""
+    auth.criar_ou_trocar_senha("avaliador@test.local", "senha-boa")
+    assert client.post("/api/auth/login", json={"email": "avaliador@test.local",
+                                                "password": "errada"}).status_code == 401
+    r = client.post("/api/auth/login", json={"email": "avaliador@test.local", "password": "senha-boa"})
     assert r.status_code == 200
-    assert db.setting("dono_email") == DONO
-    assert client.put("/api/admin/avaliacao/dono", json={"email": "x@y"}).status_code in (401, 403)
+    assert auth.user_id_from_token(r.json()["token"]) == auth.user_by_email("avaliador@test.local")["id"]
+    assert auth.user_id_from_token(r.json()["token"] + "x") is None
 
 
 def test_outro_usuario_403(client, dono):

@@ -29,9 +29,23 @@ def _ler(id_: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+# Laudos reais usados como referência de estilo. Têm dados de clientes, por isso ficam fora
+# do repositório: se você tiver os arquivos, copie para assets/conhecimento (estão no
+# .gitignore). Sem eles a redação usa os trechos anonimizados de exemplos_secoes.json.
+OPCIONAIS = {"A1", "A2", "P8"}
+
+
 def texto(*ids: str) -> str:
-    """Concatena os documentos pedidos, cada um sob um cabeçalho com seu id."""
-    return "\n\n".join(f"===== {i} =====\n{_ler(i).strip()}" for i in ids)
+    """Concatena os documentos pedidos, cada um sob um cabeçalho com seu id. Os laudos de
+    referência (OPCIONAIS) são pulados quando não estão na pasta."""
+    partes = []
+    for i in ids:
+        try:
+            partes.append(f"===== {i} =====\n{_ler(i).strip()}")
+        except KeyError:
+            if i not in OPCIONAIS:
+                raise
+    return "\n\n".join(partes)
 
 
 def _linhas_tabela(md: str) -> list[list[str]]:

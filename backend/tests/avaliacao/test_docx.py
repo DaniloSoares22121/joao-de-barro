@@ -113,7 +113,7 @@ def test_docx_so_documento_ou_vistoria():
     txt = _texto(p)
     assert "999" not in txt
     assert "364,00" in txt  # campo de documento aparece
-    assert "Rua das Acácias, Quadra 50" in txt
+    assert "Rua das Acácias, Quadra 12" in txt
     assert "SEGREDO-VERBAL-XYZ" not in txt
 
 

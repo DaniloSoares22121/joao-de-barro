@@ -30,6 +30,6 @@ export default defineConfig({
   },
   server: {
     port: 5177,
-    proxy: { "/api": "http://127.0.0.1:8866", "/ws": { target: "ws://127.0.0.1:8866", ws: true } },
+    proxy: { "/api": "http://127.0.0.1:8870", "/ws": { target: "ws://127.0.0.1:8870", ws: true } },
   },
 })
