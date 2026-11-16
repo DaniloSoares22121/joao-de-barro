@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="160" height="160"><style>
+.bird{transform-box:view-box;transform-origin:30px 79px;animation:hop 5.6s ease-in-out infinite}
+.head{transform-box:view-box;transform-origin:34px 30px}
+.ball{animation:ball 5.6s linear infinite}
+.patch{animation:patch 5.6s ease-in-out infinite}
+@keyframes hop{
+0%{transform:translate(13px,-35px) rotate(0)}
+6%{transform:translate(13px,-35px) rotate(-6deg)}
+11%{transform:translate(13px,-35px) rotate(0)}
+14%{transform:translate(12px,-38px) rotate(6deg)}
+22%{transform:translate(45px,-46px) rotate(32deg)}
+30%{transform:translate(105px,-50px) rotate(32deg)}
+30.2%{transform:translate(-85px,-50px) rotate(30deg)}
+48%{transform:translate(-28px,-48px) rotate(26deg)}
+57%{transform:translate(6px,-42px) rotate(10deg)}
+62%{transform:translate(13px,-35px) rotate(0)}
+67%{transform:translate(13px,-35px) rotate(14deg)}
+71%{transform:translate(13px,-35px) rotate(4deg)}
+75%{transform:translate(13px,-35px) rotate(14deg)}
+80%{transform:translate(13px,-35px) rotate(0)}
+90%{transform:translate(13px,-35px) rotate(-5deg)}
+100%{transform:translate(13px,-35px) rotate(0)}}
+@keyframes ball{0%,38%{opacity:0}41%,72%{opacity:1}76%,100%{opacity:0}}
+@keyframes patch{0%{opacity:1}20%,72%{opacity:0}78%,100%{opacity:1}}
+@keyframes wing{0%,12%{opacity:0}14%,60%{opacity:1}62%,100%{opacity:0}}
+@keyframes flap{0%,100%{transform:rotate(-25deg)}50%{transform:rotate(30deg)}}
+.wing{transform-box:view-box;transform-origin:24px 44px;animation:wing 5.6s linear infinite}
+.wing path{transform-box:view-box;transform-origin:24px 44px;animation:flap .45s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.bird,.ball,.patch,.wing,.wing path{animation:none}.ball,.wing{opacity:0}.bird{transform:translate(13px,-35px)}}
+</style><defs><clipPath id="cl7"><rect width="100" height="110"/></clipPath></defs>
+<g transform="translate(9 20) scale(.8)"><g clip-path="url(#cl7)"><g transform="translate(16 12) scale(.86)"><path d="M14 74 C14 36 34 18 54 18 C76 18 88 38 88 74 Z" fill="#B5562B"/><path d="M26 60 C30 46 40 36 54 34" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".5"/><circle cx="62" cy="54" r="11" fill="#16283A"/></g><ellipse class="patch" cx="66" cy="33" rx="5" ry="2.6" fill="#9E4A24"/></g><g transform="translate(16 12) scale(.86)"><rect x="8" y="74" width="86" height="8" rx="4" fill="#16283A"/></g>
+</g></svg>

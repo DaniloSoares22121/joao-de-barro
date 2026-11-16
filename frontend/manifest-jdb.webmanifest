@@ -1,0 +1,85 @@
+{
+  "name": "JdB Laudo",
+  "short_name": "JdB Laudo",
+  "start_url": "./joaodebarro.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4EDE4",
+  "theme_color": "#16283A",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "jdb-marca/jdb-laudo-icone-app-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "jdb-marca/jdb-laudo-icone-app-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "jdb-marca/jdb-laudo-icone-android-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "share_target": {
+    "action": "./compartilhar",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "arquivos",
+          "accept": [
+            "application/zip",
+            "application/x-zip-compressed",
+            "text/plain",
+            "text/csv",
+            "text/vcard",
+            "text/x-vcard",
+            "application/pdf",
+            "image/*",
+            "audio/*",
+            "video/*",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".zip",
+            ".txt",
+            ".opus",
+            ".ogg",
+            ".m4a",
+            ".mp3",
+            ".aac",
+            ".wav",
+            ".amr",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".heic",
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".xls",
+            ".xlsx",
+            ".csv",
+            ".mp4",
+            ".3gp",
+            ".mov",
+            ".vcf"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,7 @@ CAP = Captura(ok=True, url_final="https://www.zapimoveis.com.br/imovel/x", texto
 
 
 def _mock(monkeypatch, dados, visto):
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         visto.update(sistema=sistema, prompt=prompt, arquivos=arquivos)
         return esquema.model_validate(dados)
     monkeypatch.setattr(ia, "perguntar", fake)

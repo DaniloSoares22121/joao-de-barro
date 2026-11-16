@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, Clock, Loader2, OctagonX, PlugZap } from 'lucide-react'
-import { STATUS_BLOQUEADO, statusInfo, type Tom } from './rotulos'
+import { AlertTriangle, CheckCircle2, Clock, Loader2, OctagonX, PlugZap, UserCheck } from 'lucide-react'
+import { STATUS_AGUARDANDO_AVALIADOR, STATUS_BLOQUEADO, statusInfo, type Tom } from './rotulos'
 
 const CLASSES: Record<Tom, string> = {
   ok: 'bg-emerald-50 text-emerald-800 ring-emerald-600/20',
@@ -15,11 +15,12 @@ function Icone({ status, tom }: { status: string | null | undefined; tom: Tom })
   if (tom === 'andamento') return <Loader2 {...p} className="animate-spin" />
   if (status === STATUS_BLOQUEADO) return <OctagonX {...p} />
   if (status === 'aguardando') return <PlugZap {...p} />
+  if (status === STATUS_AGUARDANDO_AVALIADOR) return <UserCheck {...p} />
   if (tom === 'aviso' || tom === 'erro') return <AlertTriangle {...p} />
   return <Clock {...p} />
 }
 
-export default function StatusBadge({ status }: { status: string | null | undefined }) {
-  const { texto, tom } = statusInfo(status)
+export default function StatusBadge({ status, etapa }: { status: string | null | undefined; etapa?: string | null }) {
+  const { texto, tom } = statusInfo(status, etapa)
   return <span className={`chip ${CLASSES[tom]}`}><Icone status={status} tom={tom} />{texto}</span>
 }

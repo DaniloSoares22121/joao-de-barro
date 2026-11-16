@@ -1,0 +1,98 @@
+[
+ {
+  "texto": "revisor (visual/montagem): página 7 quase vazia (140 caracteres; imagens em 1% da página)",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): Itens 7.1 (pág. 4) e 8 (pág. 9): o laudo diz que existem 'duas casas de festas, uma na mesma Quadra 00 e outra na Quadra 00' e trata isso como fator desfavorável à liquidez. Nenhum campo extraído traz essa informação, nem de documento nem de vistoria (D-013; K0.1 §1 e §3). Ou o avaliador indica a fonte (foto ou registro da vistoria), ou os dois parágrafos saem do laudo.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): Itens 5 (pág. 3) e 10 (pág. 11): o texto afirma 'composição equivalente (três quartos)' e trata o avaliando como casa de três quartos. A extração registra que 'o número total de quartos não foi confirmado pelas fotos', e a descrição 7.4 só diz 'quartos'. Retirar a equivalência por número de quartos ou registrar a quantidade com fonte de vistoria.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): O endereço não está igual nas partes do laudo (P6, Camada A). A capa e o resumo (item 12) trazem 'Bairro Exemplo'; os itens 1 e 7.1 trazem 'Bairro Exemplo'. A escritura e o IPTU registram 'Bairro Exemplo'/'JD EXEMPLO'. Usar uma única forma em todo o laudo.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): Item 6 (Documentação analisada, págs. 3–4): falta a consulta ao Mapa Digital Fácil de 15/11/2026. Ela está anexada no Anexo III (pág. 26) e é a fonte dos 286,09 m² da tabela 7.3. D-026 exige que o item 6 cite a consulta.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (visual/montagem): O Anexo III não segue a ordem do quadro do item 6 (P6, Camada A: 'nos anexos, legíveis, na ordem'). Ordem do quadro: escritura, IPTU, comunicado, anexo do comunicado, FIPE, Saneago. Ordem do anexo: Saneago (pág. 20), escritura (21), anexo do comunicado (22), comunicado (23), IPTU (24), FIPE (25), Mapa (26).",
+  "grave": true
+ },
+ {
+  "texto": "revisor (visual/montagem): Anexo III, pág. 21: as quatro páginas da escritura foram reduzidas a quatro imagens numa só folha. O texto (descrição do lote, cláusulas Quarta/Quinta e carimbo do R-1) fica praticamente ilegível. Distribuir as páginas para que o documento fique legível (P6, Camada A).",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): O endereço não é igual em todo o laudo. A capa e o resumo (item 12) dizem 'Bairro Exemplo'. Os itens 1 e 7.1 dizem 'Bairro Exemplo'. A escritura e o IPTU trazem 'Bairro Exemplo'/'JD EXEMPLO'; só a fatura da Saneago traz 'Bairro Exemplo'. O P6 (Camada A) pede endereço idêntico na capa, no 7.1, no resumo e nos anexos. É preciso adotar a forma do título registrado em todos os pontos e, se for o caso, registrar a diferença com a Saneago (D-017).",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): A consulta ao Mapa Digital Fácil não está no quadro do item 6. Ela foi anexada no Anexo III (_revisao/pagina-26.png) e usada no item 7.3 como fonte ('Terreno – Prefeitura (Mapa Digital Fácil) 286,09 m² – Confere com o título'). Pela D-026, o item 6 deve citar a consulta com fonte, serviço e data (15/11/2026).",
+  "grave": true
+ },
+ {
+  "texto": "revisor (visual/montagem): A ordem dos documentos no Anexo III é diferente da ordem do quadro do item 6. No item 6: 01 Escritura, 02 IPTU 2025, 03 Comunicado ITCD, 04 Anexo do comunicado, 05 Relatório FIPE, 06 Fatura Saneago. No Anexo III: Saneago (pág. 20), Escritura (pág. 21), Anexo do comunicado (_revisao/pagina-22.png), Comunicado (_revisao/pagina-23.png), IPTU (_revisao/pagina-24.png), FIPE (_revisao/pagina-25.png) e Mapa Digital Fácil (_revisao/pagina-26.png). O P6 (Camada A) pede os documentos do item 6 nos anexos, na ordem.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): Os itens 7.1 e 8 dizem que 'No entorno imediato do imóvel existem duas casas de festas, uma na mesma Quadra 00 e outra na Quadra 00' e tratam isso como fator desfavorável. Nenhum campo da extração (documento ou vistoria) nem decisão registrada do avaliador dá fonte para essa afirmação, e obs_vistoria está vazio. Pelo K0.1 (não inventar; só dado de documento ou vistoria), o avaliador deve confirmar a afirmação como observação da vistoria, com indicação da foto ou da fonte. Sem confirmação, a frase sai dos itens 7.1 e 8.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 10, 11 e 12: Dispersão alta da amostra: CV de 32,9%, com a amostra 03 (R$ 2.500,00/m²) como a que mais espalha o resultado.. Como reforçar: Apresentar o CV e o resultado sem a amostra 03 e sem as demais amostras extremas. Buscar referenciais adicionais antes de fechar o laudo, ou justificar por escrito por que não é possível.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 6, 7 e 11: Área construída de 106,24 m² sem fonte documental além do IPTU, e sem certidão atualizada da matrícula.. Como reforçar: Anexar a certidão atualizada da matrícula e registrar a medição feita na vistoria, com data e método. Se não houver medição, declarar isso como pendência e não usar a expressão 'medidas conferidas'.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 10 e 11: Áreas construídas dos referenciais variam de 80 m² a 230 m², mas nenhum fator de homogeneização foi aplicado.. Como reforçar: Justificar por que a área não altera o unitário, ou aplicar homogeneização com aval do avaliador. Também conferir se as amostras de 80 m² e 230 m² são comparáveis ao imóvel.",
+  "grave": true
+ },
+ {
+  "texto": "localizacao: polígono da IA não contém o pino; demarcado quadrado em volta do pino",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, sem reprovação: amostra e unitário foram confirmados por ele. Pelos unitários do quadro 9.1, o desvio-padrão amostral dá cerca de R$ 536/m² e o CV cerca de 33%, acima do limite de 15% da D-068. A amostra que mais espalha o resultado é a 03 (Av. Local, 80 m², R$ 2.500,00/m²), seguida da 06 (R$ 1.000,00/m²). Quando o CV aparecer no laudo, o assistente técnico da Secretaria da Economia pode atacar a dispersão. Recomenda-se uma justificativa expressa no item 9.2/10 ou a reavaliação da amostra 03 (D-060).",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador: na tabela 9.1 (_revisao/pagina-10.png), a coluna 'Foto Principal – Valor' dos seis referenciais traz só o valor, sem a foto do anúncio que o padrão A1 pede. O item 9 diz que a idade aparente dos referenciais foi 'estimada pelas fotografias dos anúncios', mas nenhuma foto aparece no laudo. Se a falta veio de bloqueio do portal, fica como ressalva. Se as capturas existem, a foto principal deve entrar.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, não é reprovação, porque a amostra foi confirmada por ele. Pelos unitários do item 9.1, o CV da amostra fica em cerca de 33%, acima do limite de 15% (D-068). As amostras que mais espalham o resultado são a 03 (R$ 2.500,00/m², 80 m², em avenida) e a 06 (R$ 1.000,00/m², 230 m²) (D-060). O texto também afirma 'composição equivalente' e 'idade aparente semelhante' para todos os seis referenciais, todos com 'cerca de 30 anos' estimados pelas fotos dos anúncios. Em parecer destinado ao fisco (malha ITCD), esse é um ponto atacável. Registrar a justificativa ou rever a amostra, se o avaliador quiser.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1, tabela de amostras, pág. 10 (_revisao/pagina-10.png): os 6 referenciais estão sem a foto principal. A coluna 'Foto Principal – Valor' mostra só o preço, o que foge do padrão A1/D-014 (foto de 4,0 cm inteira com o valor abaixo). Se a falta vier do bloqueio dos portais (ZAP e deztop), fica como ressalva a avisar ao avaliador. Se as capturas existem, as fotos devem entrar na tabela.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador: o item 9 (pág. 10) registra 'Consulta realizada em 15/11/2026', dois dias depois da data-base e da vistoria (13/11/2026). Num laudo que vai à Secretaria da Economia, o assistente da outra parte pode questionar essa diferença entre a data da pesquisa e a data-base. Avaliar se cabe uma frase dizendo que as ofertas consultadas estavam vigentes na data-base, ou ajustar a data se a pesquisa foi feita antes.",
+  "grave": false
+ },
+ {
+  "texto": "orquestrador: data-base corrigida de 13/11/2026 para 28/10/2026 (a data que você informou: DITCD)",
+  "grave": false
+ },
+ {
+  "texto": "montagem: Confira a capa: o contorno vermelho acompanha o imóvel",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): Item 7.4 (pág. 6): os três subitens do estado de conservação aparecem como itens independentes da lista principal, no mesmo nível de 'Idade aparente' e 'Padrão construtivo'. São eles: 'Pintura e reboco externos desgastados…', 'Manchas de umidade…' e 'Pintura interna descascada…'. Devem ficar recuados como subitens de 'Estado de conservação'.",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): Resumo (item 12, pág. 14): a linha 'Estado de conservação' diz 'Entre regular e reparos simples – idade aparente Cerca de 30 anos'. 'Cerca' está com maiúscula no meio da frase; corrigir para 'cerca de 30 anos'.",
+  "grave": false
+ }
+]

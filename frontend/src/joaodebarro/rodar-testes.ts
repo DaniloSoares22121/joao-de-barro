@@ -1,9 +1,10 @@
-/* Executa todos os *.test.ts do João de Barro: `npm.cmd run test:joaodebarro`. */
+/* Executa todos os *.test.ts do JdB: `npm.cmd run test:joaodebarro`. */
 import type { Falha } from './testar'
 import { testes as campo } from './campo.test'
 import { testes as controle } from './controle.test'
 import { testes as logica } from './logica.test'
 import { testes as validacao } from './validacao.test'
+import { testes as nomesCampos, testesAindaNaoSei } from './nomesCampos.test'
 
 declare const process: { exit(codigo: number): never }
 
@@ -12,6 +13,8 @@ const suites: Record<string, () => Falha[] | Promise<Falha[]>> = {
   logica,
   campo,
   controle,
+  nomesCampos,
+  testesAindaNaoSei,
 }
 
 let total = 0

@@ -1,5 +1,8 @@
+import { useStore } from './store'
+import Conhecimento from './Conhecimento'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ApiError, baixarRaw, get, post, put } from './api'
+import { ApiError, baixarRaw, get, post, postForm, put } from './api'
+import { trechosRicos } from './markdown'
 import { hojeBR, proximoCodigoDecisao, proximoCodigoNorma } from './codigos'
 import { dataHoraBR } from './rotulos'
 
@@ -110,7 +113,7 @@ function Avaliador({ inicial, recarregar }: { inicial: Record<string, string>; r
       <div className="grid gap-4 sm:grid-cols-2">
         {CAMPOS_AVALIADOR.map((c) => (
           <Rotulado key={c.chave} id={`av-${c.chave}`} rotulo={c.rotulo}>
-            <input id={`av-${c.chave}`} className="input" value={form[c.chave] ?? ''} placeholder={c.placeholder}
+            <input id={`av-${c.chave}`} name={`jdb-av-${c.chave}`} autoComplete="off" className="input" value={form[c.chave] ?? ''} placeholder={c.placeholder}
                    disabled={salvando} onChange={(e) => setForm({ ...form, [c.chave]: e.target.value })} />
           </Rotulado>
         ))}
@@ -340,6 +343,21 @@ function EditorNorma({ valor, novo, onSalvar, onCancelar }: {
   )
 }
 
+/** Markdown simples dos textos de norma: **negrito**, `código`, [link](url) e quebras de linha. */
+function Md({ texto }: { texto: string }) {
+  return (
+    <span className="whitespace-pre-line">
+      {trechosRicos(texto.replace(/\r\n/g, '\n').replace(/^#{1,6}\s+/gm, '').replace(/^\s*[-*]\s+/gm, '• ')).map((t, i) => {
+        if (t.link) {
+          return <a key={i} href={t.link} target="_blank" rel="noopener noreferrer" className="text-barro underline">{t.texto}</a>
+        }
+        if (t.codigo) return <code key={i} className="rounded bg-stone-100 px-1 font-mono text-[0.9em]">{t.texto}</code>
+        return t.negrito ? <strong key={i} className="font-semibold">{t.texto}</strong> : <span key={i}>{t.texto}</span>
+      })}
+    </span>
+  )
+}
+
 function Normas({ lista, recarregar }: { lista: Norma[]; recarregar: () => Promise<void> }) {
   const [editando, setEditando] = useState<string | null>(null)
   const [novaBase, setNovaBase] = useState<Norma | null>(null)
@@ -373,11 +391,11 @@ function Normas({ lista, recarregar }: { lista: Norma[]; recarregar: () => Promi
               : (
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-sm"><span className="font-semibold text-stone-900">{n.codigo}</span> · {n.titulo}
+                    <p className="break-words text-sm"><span className="font-semibold text-stone-900">{n.codigo}</span> · <Md texto={n.titulo} />
                       {!n.vigente && <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-xs font-medium text-stone-600">Não vigente</span>}
                     </p>
                     {n.itens['Status verificado'] && (
-                      <p className="mt-0.5 line-clamp-2 break-words text-xs text-stone-500">{n.itens['Status verificado']}</p>
+                      <p className="mt-0.5 line-clamp-3 break-words text-xs text-stone-500"><Md texto={n.itens['Status verificado']} /></p>
                     )}
                   </div>
                   <button className="btn-link shrink-0" onClick={() => setEditando(n.codigo)} disabled={editando !== null}>Editar</button>
@@ -386,6 +404,81 @@ function Normas({ lista, recarregar }: { lista: Norma[]; recarregar: () => Promi
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ identidade visual (logo)
+export function IdentidadeVisual() {
+  const [url, setUrl] = useState<string | null>(null)
+  const [estado, setEstado] = useState<'carregando' | 'ok' | 'sem' | 'erro'>('carregando')
+  const [versao, setVersao] = useState(0)
+  const [arquivo, setArquivo] = useState<File | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    let u = ''
+    setEstado('carregando')
+    baixarRaw('/config/logo').then(({ blob }) => {
+      if (!vivo) return
+      u = URL.createObjectURL(blob)
+      setUrl(u)
+      setEstado('ok')
+    }).catch((e) => {
+      if (!vivo) return
+      setUrl(null)
+      setEstado(e instanceof ApiError && e.status === 404 ? 'sem' : 'erro')
+    })
+    return () => { vivo = false; if (u) URL.revokeObjectURL(u) }
+  }, [versao])
+
+  async function enviar() {
+    if (!arquivo) return
+    setMsg(null)
+    if (arquivo.type !== 'image/png' && !/\.png$/i.test(arquivo.name)) {
+      setMsg({ ok: false, texto: 'Envie a logo em PNG.' })
+      return
+    }
+    setEnviando(true)
+    try {
+      const fd = new FormData()
+      fd.append('arquivo', arquivo, arquivo.name)
+      await postForm('/config/logo', fd)
+      setArquivo(null)
+      setVersao((v) => v + 1)
+      setMsg({ ok: true, texto: 'Logo atualizada.' })
+    } catch (e) {
+      setMsg({ ok: false, texto: erroTexto(e) })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-stone-600">
+        Logo horizontal em PNG, de preferência com fundo transparente. Ela vai na capa e no cabeçalho do laudo.
+      </p>
+      <div className="flex min-h-[6rem] items-center justify-center rounded-lg border border-dashed border-stone-300 p-3"
+           style={{ background: 'repeating-conic-gradient(#f5f5f4 0% 25%, #fff 0% 50%) 0 0 / 16px 16px' }}>
+        {estado === 'carregando' && <span className="text-sm text-stone-500" role="status">Carregando a logo…</span>}
+        {estado === 'sem' && <span className="text-sm text-stone-500">Nenhuma logo enviada ainda.</span>}
+        {estado === 'erro' && <span className="text-sm text-red-700">Não foi possível carregar a logo atual.</span>}
+        {estado === 'ok' && url && <img src={url} alt="Logo atual do laudo" className="max-h-24 max-w-full object-contain" />}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <label htmlFor="logo-arquivo" className="rotulo">Nova logo (PNG)</label>
+          <input id="logo-arquivo" type="file" accept="image/png,.png" className="input !py-2" disabled={enviando}
+                 onChange={(e) => { setMsg(null); setArquivo(e.target.files?.[0] ?? null) }} />
+        </div>
+        <button className="btn" onClick={() => void enviar()} disabled={!arquivo || enviando}>
+          {enviando ? 'Enviando…' : 'Enviar logo'}
+        </button>
+      </div>
+      <Status msg={msg} />
     </div>
   )
 }
@@ -459,7 +552,7 @@ function Coletor() {
     return (
       <div className="rounded-lg bg-stone-50 px-4 py-3 text-sm text-stone-600">
         <p className="font-medium text-stone-800">Coletor disponível em breve</p>
-        <p className="mt-0.5">O programa que coleta os anúncios no seu PC ainda não foi liberado nesta conta.</p>
+        <p className="mt-0.5">O programa do mapa ainda não foi liberado nesta conta.</p>
       </div>
     )
   }
@@ -483,9 +576,9 @@ function Coletor() {
         </span>
       </div>
       <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-700">
-        <li>Baixe e instale o Coletor no PC que fica ligado durante as pesquisas.</li>
+        <li>Baixe e instale o programa no seu PC.</li>
         <li>Gere um código de pareamento e informe-o no programa.</li>
-        <li>Mantenha o PC ligado: a pesquisa de referenciais espera o Coletor ficar online.</li>
+        <li>Com ele ligado, o JdB faz o mapa da localização do imóvel (Google Maps e Mapa Digital Fácil).</li>
       </ol>
       <div className="flex flex-wrap gap-2">
         <button className="btn" onClick={() => void baixar()} disabled={baixando}>{baixando ? 'Baixando…' : 'Baixar o Coletor'}</button>
@@ -503,6 +596,27 @@ function Coletor() {
 }
 
 // ------------------------------------------------------------------ tela
+/** 184/185: "Meus dados" do dono — a identificação que sai no laudo e o aviso por WhatsApp (antes em "Coletor e sistema"). */
+export function DadosDoDono() {
+  const [cfg, setCfg] = useState<ConfigResp | null>(null)
+  const [erro, setErro] = useState('')
+  const carregar = useCallback(async () => {
+    try { const c = await get<ConfigResp>('/config'); setCfg({ ...c, avaliador: c.avaliador ?? {} }); setErro('') }
+    catch { setErro('Não foi possível abrir seus dados. Tente de novo.') }
+  }, [])
+  useEffect(() => { void carregar() }, [carregar])
+  if (erro) return <p className="aviso-impede" role="alert">{erro}</p>
+  if (!cfg) return <p className="texto" role="status">Abrindo…</p>
+  return (
+    <div className="cartao-pad grid gap-3">
+      <Avaliador inicial={cfg.avaliador} recarregar={carregar} />
+      <div className="border-t border-stone-100 pt-3">
+        <AvisoWhatsapp ligado={cfg.aviso_whatsapp !== false} recarregar={carregar} />
+      </div>
+    </div>
+  )
+}
+
 export default function Config() {
   const [cfg, setCfg] = useState<ConfigResp | null>(null)
   const [erro, setErro] = useState('')
@@ -523,8 +637,9 @@ export default function Config() {
   return (
     <section className="mx-auto max-w-3xl space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-stone-900">Configurações</h1>
-        <p className="text-sm text-stone-500">Dados do avaliador, regras aprendidas, normas e Coletor.</p>
+        <button type="button" className="voltar-jdb" onClick={() => useStore.getState().ir('config')}>← Configurações</button>
+        <h1 className="titulo-pag">Coletor e sistema</h1>{/* 185: o título era "Configurações", igual à lista */}
+        <p className="text-sm text-stone-500">Programa do mapa (Coletor), regras aprendidas e normas. Seus dados e a logo ficam em Meus dados e Marca e modelos.</p>
       </div>
 
       {erro && (
@@ -538,26 +653,26 @@ export default function Config() {
 
       {cfg && (
         <>
-          <Secao titulo="Avaliador" descricao="Identificação que sai no laudo.">
-            <Avaliador inicial={cfg.avaliador} recarregar={carregar} />
-            <div className="mt-4 border-t border-stone-100 pt-3">
-              <AvisoWhatsapp ligado={cfg.aviso_whatsapp !== false} recarregar={carregar} />
-            </div>
-          </Secao>
-          <Secao titulo="Decisões e regras (P3)" descricao="Cada decisão vira regra para os próximos laudos."
+          <Secao titulo="Decisões e regras" descricao="Cada decisão vira regra para os próximos laudos."
                  contagem={`${cfg.decisoes.length}`} aberta={false}>
             <Decisoes lista={cfg.decisoes} recarregar={carregar} />
           </Secao>
-          <Secao titulo="Normas e legislação (P4)" descricao="Normas que o laudo pode citar (só as vigentes são usadas)."
+          <Secao titulo="Normas e legislação" descricao="Normas que o laudo pode citar (só as vigentes são usadas)."
                  contagem={`${cfg.normas.length}`} aberta={false}>
             <Normas lista={cfg.normas} recarregar={carregar} />
           </Secao>
         </>
       )}
 
-      <Secao titulo="Coletor" descricao="Programa do seu PC que coleta anúncios para a pesquisa de referenciais.">
+      <Secao titulo="Programa do mapa (Coletor)" descricao="Programa do seu PC que faz o mapa da localização do imóvel.">
         <Coletor />
       </Secao>
+
+      {/* ORDEM 026 v2: Minhas regras, Curadoria, Compartilhar e "Me mostre como se faz" */}
+      <Conhecimento />
+
+      {/* ORDEM 053: no celular o "Sair" fica em Conta (menu de baixo do desenho) */}
+      {/* 189: o Sair fica só no menu */}
     </section>
   )
 }

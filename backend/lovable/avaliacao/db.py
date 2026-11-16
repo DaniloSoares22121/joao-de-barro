@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -122,6 +123,8 @@ def criar_job(t: Trabalho) -> str:
             "INSERT INTO av_jobs (id, numero, dados_json, etapa, status, criado, atualizado) "
             "VALUES (?,?,?,?,?,?,?)",
             (jid, t.numero, t.model_dump_json(), "nova", "pendente", agora, agora))
+    if modo_teste():                          # 109-3: trabalho de teste fica marcado e não conta na numeração real
+        set_setting(TESTE_JOB + jid, str(t.numero))
     pasta(jid)
     return jid
 
@@ -229,15 +232,70 @@ def fachada(job_id: str) -> str | None:
     return r["caminho"] if r else None
 
 
+# 109-3: numeração dos testes do Capitão (1, 2, 3…) separada da numeração real do Alan.
+# "numeracao_modo" = "teste" liga; o trabalho criado nesse modo ganha "job_teste:{id}". A numeração real ignora
+# os trabalhos de teste (os marcados e os da lista de testes antigos); "numeracao_real_proximo", se o Alan informar,
+# é o piso do próximo número real.
+TESTE_JOB = "job_teste:"
+TESTES_ANTIGOS = {9119, 9120, 9121, 9122, 9123, 9124, 9125, 9126, 9127}
+
+
+def modo_teste() -> bool:
+    return (setting("numeracao_modo") or "") == "teste"
+
+
+def eh_teste(job_id: str) -> bool:
+    return bool(setting(TESTE_JOB + job_id))
+
+
 def proximo_numero() -> int:
     with _conn() as c:
-        r = c.execute("SELECT MAX(numero) AS m FROM av_jobs").fetchone()
-    return int(r["m"] or 0) + 1
+        linhas = c.execute("SELECT id, numero FROM av_jobs").fetchall()
+        marcados = {r[0][len(TESTE_JOB):] for r in c.execute("SELECT chave FROM av_settings WHERE chave LIKE ?",
+                                                               (TESTE_JOB + "%",))}
+    usados = {int(r["numero"]) for r in linhas}
+    if modo_teste():
+        testes = [int(r["numero"]) for r in linhas if r["id"] in marcados]
+        n = max(testes, default=0) + 1
+    else:
+        reais = [int(r["numero"]) for r in linhas if r["id"] not in marcados and int(r["numero"]) not in TESTES_ANTIGOS]
+        n = max(max(reais, default=0) + 1, int(setting("numeracao_real_proximo") or 0))
+    while n in usados:
+        n += 1
+    return n
 
 
 def numero_usado(numero: int) -> bool:
     with _conn() as c:
         return c.execute("SELECT 1 FROM av_jobs WHERE numero=? LIMIT 1", (numero,)).fetchone() is not None
+
+
+def instrucoes_avaliador(job_id: str) -> list[str]:
+    """074-F3: o que o avaliador escreveu em "Confirmo mesmo assim, porque…" (vale para o laudo)."""
+    with _conn() as c:
+        rows = c.execute("SELECT dados_json FROM av_events WHERE job=? AND etapa='selecao' AND msg LIKE "
+                         "'avaliador confirmou mesmo assim:%' ORDER BY id", (job_id,)).fetchall()
+    out = []
+    for r in rows:
+        try:
+            v = (json.loads(r["dados_json"] or "{}") or {}).get("confirmacao") or ""
+        except ValueError:
+            v = ""
+        if v.strip() and v.strip() not in out:
+            out.append(v.strip())
+    return out
+
+
+def cv_so_na_planilha_txt(txt: str) -> bool:
+    """A mesma regra de cv_so_na_planilha, aplicada a um texto (ex.: as instruções que entram nas fontes)."""
+    return bool(re.search(r"planilha", txt or "", re.I) and re.search(r"coeficiente|\bcv\b|dispers", txt or "", re.I)
+                and re.search(r"s[oó] na planilha|apenas na planilha|somente na planilha", txt or "", re.I))
+
+
+def cv_so_na_planilha(job_id: str) -> bool:
+    """O avaliador pediu a conta do coeficiente só na planilha (decisão do Alan no 122, D-068)."""
+    return any(re.search(r"planilha", x, re.I) and re.search(r"coeficiente|\bcv\b|dispers", x, re.I)
+               for x in instrucoes_avaliador(job_id))
 
 
 def arquivos(job_id: str) -> list[dict]:
@@ -251,7 +309,8 @@ def correcoes(job_id: str, etapa: str) -> list[str]:
     with _conn() as c:
         rows = c.execute("SELECT msg FROM av_events WHERE job=? AND etapa=? AND nivel='correcao' "
                          "ORDER BY id", (job_id, etapa)).fetchall()
-    return [r["msg"] for r in rows]
+    # 101-1: o reforço automático da contestação não é correção do avaliador (os gravados assim deixam de valer)
+    return [r["msg"] for r in rows if not str(r["msg"] or "").startswith("Reforce no texto (contestação simulada)")]
 
 
 def texto_correcoes(job_id: str, etapa: str) -> str:
@@ -443,3 +502,48 @@ def anuncios_recentes(bairro_norm: str, tipologia: str, desde: str,
         args.append(area_max)
     with _conn() as c:
         return [dict(r) for r in c.execute(sql + " ORDER BY visto_em DESC", args)]
+
+
+COPIA_MARCA = "CÓPIA DE TESTE (não usar)"
+_SEM_COPIA = ("entrega", "_revisao", "anexos")
+
+
+def duplicar_job(job_id: str, numero_novo: int) -> str:
+    """ORDEM 028-5: "Duplicar trabalho". Cópia com nº novo: arquivos, campos, candidatos, todos os
+    eventos (resultados das etapas já feitas) e a escolha de base/área. O laudo entregue não é
+    copiado. O original só é LIDO."""
+    import shutil
+    orig = job(job_id)
+    dados = dict(orig["dados"])
+    novo_id = uuid.uuid4().hex[:12]
+    dados.update({"id": novo_id, "numero": numero_novo,
+                  "contexto": f"{COPIA_MARCA} do trabalho nº {orig['numero']}. " + (dados.get("contexto") or "")})
+    agora = _agora()
+    with _conn() as c:
+        c.execute("INSERT INTO av_jobs (id, numero, dados_json, etapa, status, criado, atualizado) VALUES (?,?,?,?,?,?,?)",
+                  (novo_id, numero_novo, json.dumps(dados, ensure_ascii=False, default=str), orig["etapa"],
+                   orig["status"], agora, agora))
+        for r in c.execute("SELECT nome, tipo, caminho, papel, upload_id FROM av_files WHERE job=? ORDER BY id",
+                           (job_id,)).fetchall():
+            c.execute("INSERT INTO av_files (job, nome, tipo, caminho, papel, upload_id) VALUES (?,?,?,?,?,?)",
+                      (novo_id, r["nome"], r["tipo"], r["caminho"], r["papel"], r["upload_id"]))
+        for t, cols in (("av_fields", "nome, json"), ("av_candidates", "n, json")):
+            for r in c.execute(f"SELECT {cols} FROM {t} WHERE job=?", (job_id,)).fetchall():
+                c.execute(f"INSERT INTO {t} (job, {cols}) VALUES (?,?,?)", (novo_id, r[0], r[1]))
+        for r in c.execute("SELECT etapa, nivel, msg, dados_json, ts FROM av_events WHERE job=? ORDER BY id",
+                           (job_id,)).fetchall():
+            c.execute("INSERT INTO av_events (job, etapa, nivel, msg, dados_json, ts) VALUES (?,?,?,?,?,?)",
+                      (novo_id, r["etapa"], r["nivel"], r["msg"], r["dados_json"], r["ts"]))
+    origem, destino = pasta(job_id), pasta(novo_id)
+    for item in origem.iterdir():
+        if item.name in _SEM_COPIA:
+            continue
+        if item.is_dir():
+            shutil.copytree(item, destino / item.name, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, destino / item.name)
+    esc = setting(f"area_escolha:{job_id}")
+    if esc:
+        set_setting(f"area_escolha:{novo_id}", esc)
+    evento(novo_id, "orquestrador", "info", f"trabalho duplicado do nº {orig['numero']} ({COPIA_MARCA})")
+    return novo_id

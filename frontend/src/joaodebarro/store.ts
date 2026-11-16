@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { hashDe, lerHash, type Prefill } from './campo'
 import { token } from './token'
 
-export type Tela = 'login' | 'lista' | 'novo' | 'job' | 'config'
+export type Tela = 'login' | 'lista' | 'novo' | 'job' | 'config' | 'propostas' | 'plano' | 'planos' | 'clientes' | 'cliente' | 'alinhamento' | 'cadastro' | 'avaliadores' | 'regras' | 'avisos' | 'laudo' | 'assinar' | 'sistema' | 'pagamento' | 'guia' | 'compartilhar' | 'detalhes' | 'lixeira' | 'precos' | 'marca'
 
 interface Estado {
   token: string
@@ -20,6 +20,25 @@ interface Estado {
 }
 
 const temJanela = typeof window !== 'undefined'
+
+/** Rotas só por hash ("#/", "#/novo", "#/job/<id>", "#/config"). Um caminho ".../configuracoes"
+ * (link direto) vira caminho base + "#/config"; hashes fora do padrão são reescritos sem nova entrada. */
+function normalizarUrl() {
+  if (!temJanela) return
+  const { pathname, search, hash } = window.location
+  const m = /^(.*\/)configuracoes\/?$/.exec(pathname)
+  if (m) {
+    window.history.replaceState(window.history.state, '', `${m[1]}${search}#/config`)
+    return
+  }
+  const r = lerHash(hash)
+  const canon = hashDe(r.tela, r.jobId)
+  if (hash && hash !== canon && !(canon === '#/' && hash === '#')) {
+    window.history.replaceState(window.history.state, '', `${pathname}${search}${canon}`)
+  }
+}
+normalizarUrl()
+
 const t0 = token.get()
 const r0 = lerHash(temJanela ? window.location.hash : '')
 
@@ -37,7 +56,7 @@ export const useStore = create<Estado>((set, get) => ({
   prefill: null,
   negado: false,
   ir: (tela, jobId) => {
-    const id = jobId ?? (tela === 'job' ? get().jobId : null)
+    const id = jobId ?? (['job', 'detalhes', 'cliente', 'alinhamento'].includes(tela) ? get().jobId : null)
     set({ tela, jobId: id, prefill: null })
     sincronizarHash(tela, id)
   },
@@ -56,6 +75,7 @@ export const useStore = create<Estado>((set, get) => ({
 // Voltar/avançar do navegador e links com hash: o hash manda na tela.
 if (temJanela) {
   window.addEventListener('hashchange', () => {
+    normalizarUrl()
     const s = useStore.getState()
     if (!s.token) return
     const r = lerHash(window.location.hash)

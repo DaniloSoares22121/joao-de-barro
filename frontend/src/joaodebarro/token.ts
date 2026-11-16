@@ -1,4 +1,4 @@
-/* Token da sessão do João de Barro: uma única chave em localStorage ("jdb_token"),
+/* Token da sessão do JdB: uma única chave em localStorage ("jdb_token"),
  * sempre com try/catch (modo anônimo, armazenamento bloqueado). */
 const CHAVE = 'jdb_token'
 

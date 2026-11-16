@@ -9,6 +9,7 @@ import logging
 import os
 
 from . import db
+from .plural import pl
 
 log = logging.getLogger(__name__)
 
@@ -32,9 +33,9 @@ def mensagem(job_id: str) -> str:
     d = j["dados"]
     ent = db.resultado(job_id, "entrega") or {}
     n = len(ent.get("pendencias") or [])
-    return (f"João de Barro: laudo nº {j['numero']} – {d.get('cliente', '')} "
+    return (f"JdB Laudo: laudo nº {j['numero']} – {d.get('cliente', '')} "
             f"({d.get('tipo', '')}, {d.get('bairro', '')}) {ent.get('status', j['status'])}. "
-            f"{n} pendência(s). https://{host()}/#/job/{job_id}")
+            f"{pl(n, 'pendência', 'pendências')}. https://{host()}/#/job/{job_id}")
 
 
 def telefone() -> str:
@@ -45,6 +46,13 @@ def telefone() -> str:
     except ValueError:
         return ""
     return str(av.get("telefone_avisos") or "").strip() or str(av.get("telefone") or "").strip()
+
+
+def _nacional(tel: str) -> str:
+    """172-5: o número sem o código do país: "5562999990000" e "(62) 99999-0000" viram o mesmo "62999990000"."""
+    import re
+    d = re.sub(r"\D", "", tel or "")
+    return d[2:] if d.startswith("55") and len(d) in (12, 13) else d
 
 
 def _situacao_wa() -> dict:
@@ -73,8 +81,8 @@ def status() -> dict:
     if not st.get("conectado"):
         return {**out, "ok": False, "motivo": "desconectado",
                 "mensagem": "WhatsApp da Brixly desconectado"}
-    num = evolution.normalize_phone(str(st.get("numero") or ""))
-    if num and num == evolution.normalize_phone(tel):
+    num = _nacional(str(st.get("numero") or ""))
+    if num and num == _nacional(tel):           # 172-5: compara só os dígitos, com ou sem o 55
         return {**out, "ok": False, "motivo": "proprio_numero", "mensagem": PROPRIO_NUMERO}
     return out
 

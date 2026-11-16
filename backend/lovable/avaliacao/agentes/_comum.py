@@ -8,7 +8,11 @@ from ..modelos import Trabalho
 
 
 def trabalho(job_id: str) -> Trabalho:
-    return Trabalho.model_validate(db.job(job_id)["dados"])
+    """Dados do trabalho para os agentes de IA. O solicitante vai como no laudo (ORDEM 013 g):
+    sem representante nem CPF, que não devem chegar à IA nem aos textos."""
+    from ..nomes import qualificacao_laudo
+    t = Trabalho.model_validate(db.job(job_id)["dados"])
+    return t.model_copy(update={"cliente": qualificacao_laudo(t.cliente)})
 
 
 def arquivos(job_id: str) -> tuple[Path, list[Path]]:
@@ -19,3 +23,10 @@ def arquivos(job_id: str) -> tuple[Path, list[Path]]:
 
 def lista(rels: list[Path]) -> str:
     return "\n".join(f"- {r.as_posix()}" for r in rels) or "(nenhum arquivo enviado)"
+
+
+def avisar_ignorados(job_id: str, etapa: str, ignorados: list[str]) -> None:
+    """ORDEM 013 d: formato que a IA não lê (.cdr, .zip…) vira aviso visível, não erro."""
+    for rel in ignorados:
+        db.evento(job_id, etapa, "aviso",
+                  f"arquivo ignorado (formato que a IA não lê): {rel.rsplit('/', 1)[-1]}")

@@ -1,5 +1,4 @@
-"""Aviso por WhatsApp quando o laudo termina: não existe nesta versão (a tela e o
-navegador avisam). As funções existem para o módulo de aviso responder "desconectado"."""
+"""Substituto local do envio por WhatsApp: localmente nunca há instância conectada."""
 
 
 def situacao() -> dict:
@@ -7,4 +6,4 @@ def situacao() -> dict:
 
 
 def enviar(tel: str, corpo: str, **_kw) -> tuple[bool, str]:
-    return False, "WhatsApp não configurado nesta instalação"
+    return False, "WhatsApp não configurado nesta instalação local"

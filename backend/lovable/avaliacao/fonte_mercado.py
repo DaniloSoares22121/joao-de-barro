@@ -1,13 +1,10 @@
-"""Fonte de dados de mercado (anúncios). O Coletor real (Plano 3) se registra aqui."""
+"""A consulta de mercado (usada nos links de busca) e o registro da fonte (o Coletor, hoje só para o mapa)."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
-
-from .modelos import Referencial
 
 
 class Consulta(BaseModel):
@@ -23,20 +20,16 @@ class Consulta(BaseModel):
 
 @runtime_checkable
 class FonteMercado(Protocol):
-    async def buscar(self, job_id: str, consultas: list[Consulta]) -> list[Referencial]: ...
+    """112: a busca automática nos portais saiu; a fonte só diz se o Coletor (mapa) está ligado."""
 
     def online(self) -> bool: ...
 
 
 class FonteFixture:
-    """Devolve os anúncios de um JSON (lista de Referencial), ignorando os filtros."""
+    """Fonte de teste: Coletor desligado (o caminho do JSON fica por compatibilidade dos testes)."""
 
-    def __init__(self, caminho_json: str | Path):
-        self.caminho = Path(caminho_json)
-
-    async def buscar(self, job_id: str, consultas: list[Consulta]) -> list[Referencial]:
-        dados = json.loads(self.caminho.read_text(encoding="utf-8"))
-        return [Referencial.model_validate(d) for d in dados]
+    def __init__(self, caminho_json: str | Path = ""):
+        self.caminho = Path(caminho_json) if caminho_json else None
 
     def online(self) -> bool:
         return False

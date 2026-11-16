@@ -63,7 +63,7 @@ def pedir_codigo() -> str | None:
     raiz.withdraw()
     try:
         return simpledialog.askstring(
-            "João de Barro — Coletor",
+            "JdB Laudo — Coletor",
             "Cole o código de pareamento (Configurações > Coletor no Brixly):", parent=raiz)
     finally:
         raiz.destroy()
@@ -88,4 +88,4 @@ def garantir(servidor: str | None = None, forcar_pareamento: bool = False) -> di
             salvar(cfg)
             return cfg
         except Exception as e:  # código inválido/expirado ou rede
-            messagebox.showerror("João de Barro — Coletor", f"Não foi possível parear: {e}")
+            messagebox.showerror("JdB Laudo — Coletor", f"Não foi possível parear: {e}")

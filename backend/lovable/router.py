@@ -1,17 +1,9 @@
-"""Reconhece, no texto de um erro, o que é limite de uso de verdade."""
+"""Detecção de limite de uso da IA (substitui o router do Brixly)."""
 import re
 
-# Só o que é limite DE VERDADE: "Maximum call stack size exceeded" ou "insufficient
-# permissions" não são conta esgotada.
-_RATE_RE = re.compile(
-    r"rate.?limit|rate_limit|usage limit|limit reached|(?:reached|hit) your .{0,30}limit|"
-    r"weekly limit|"
-    r"exceeded your .{0,30}limit|too many requests|overloaded|429|"
-    r"quota (?:exceeded|exhausted|reached)|out of (?:quota|credits?)|"
-    r"insufficient (?:quota|credits?|balance|funds)|(?:over|at) capacity",
-    re.IGNORECASE,
-)
+_PADRAO = re.compile(r"rate.?limit|usage limit|hit your .*limit|limit reached|too many requests|\b429\b|overloaded",
+                     re.I)
 
 
-def is_rate_limit(text: str | None) -> bool:
-    return bool(text) and bool(_RATE_RE.search(text or ""))
+def is_rate_limit(texto: str) -> bool:
+    return bool(_PADRAO.search(texto or ""))

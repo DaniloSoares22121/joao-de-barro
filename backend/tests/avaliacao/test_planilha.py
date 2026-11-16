@@ -83,5 +83,7 @@ def test_planilha_status_da_origem(tmp_path, origem, esperado):
     d = planilha.gerar(tmp_path / "p2.xlsx", _trabalho(), AREA, refs, r, origem_area=origem)
     im = openpyxl.load_workbook(d)["Imovel"]
     assert im["E9"].value == esperado
-    for lin in (2, 3, 5, 6, 7, 10):
+    for lin in (2, 5, 6, 7, 10):
         assert im.cell(lin, 5).value == "Informado"
+    assert im.cell(3, 5).value == "Pendente"     # 080-2: só bairro/cidade, sem o endereço do documento
+

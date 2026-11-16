@@ -12,10 +12,12 @@ from typing import Literal
 import pymupdf
 from pydantic import BaseModel
 
-from .. import calculo, conhecimento, db, ia, imagens
+from .. import imagens_ia, calculo, conhecimento, db, ia, imagens
 from ..docx_partes import brl
 from . import _comum
-from .selecao import Selecao, area_construida
+from . import selecao as _sel_mod
+from .selecao import refs_na_base, Selecao, area_construida
+from ..plural import pl
 
 INSTRUCAO = """\
 ETAPA ATUAL: REVISÃO FINAL DO LAUDO.
@@ -26,6 +28,30 @@ A conferência matemática é feita em código — não a repita.
 Para cada problema informe "etapa_responsavel": extracao (dado do imóvel errado), selecao
 (amostra), redacao (texto) ou montagem (layout/imagens/tabelas).
 "aprovado" = true somente se não houver problema. Não invente problemas.
+TARJA (D-062): este é o laudo do CLIENTE FINAL — TODOS os documentos (escritura, matrícula, IPTU,
+certidões, cartão CNPJ e também RG, CNH e OAB do solicitante) entram SEM tarja. Nunca peça tarja.
+Prazo, número ou data no texto SEM fonte (documento do trabalho, norma da P4 ou decisão do P3)
+é problema da camada "redacao" (etapa_responsavel "redacao"): a frase deve sair (§2.1).
+Referenciais, unitário adotado e faixa CONFIRMADOS PELO AVALIADOR (informado no pedido) são
+decisão dele: não reprove por isso. Se tiver uma ressalva sobre a amostra ou o unitário,
+registre-a com etapa_responsavel "selecao" (vira aviso ao avaliador, não reprovação).
+Campo "pendente" na extração que o avaliador preencheu como vistoria NÃO é problema: o laudo
+usa o dado do avaliador.
+Regras do Alan que NÃO são problema:
+- Arredondamento (D-065): o valor adotado é área × unitário arredondado ao MILHAR mais próximo,
+  em toda modalidade. A diferença entre o valor calculado e o adotado por esse arredondamento
+  NÃO é divergência (ex.: R$ 6.071.724,37 → R$ 6.072.000,00).
+- Apartamento: capa com a foto do condomínio SEM demarcação e legenda "Fachada do condomínio
+  onde se localiza a unidade avalianda" é o correto quando a foto não permite identificar a
+  torre com segurança (o avaliador confirma a torre). Não peça demarcação adivinhada.
+- Documento sem tarja no laudo do cliente é o CORRETO (D-062, ORDEM 045): tarja só existe em
+  material para OUTRAS pessoas (laudo de exemplo, base comum, outros avaliadores), que o sistema
+  gera à parte. Não aponte "documento/escritura/anexo sem tarja" como problema.
+- Pessoa ou placa pixelizada (desfocada) numa foto da vistoria é proteção de privacidade.
+- Foto de documento já cortada na origem (borda da página fora da foto) não é erro de montagem.
+- Referencial SEM foto principal porque o portal bloqueou o anúncio (o sistema já avisou o
+  avaliador) não se corrige refazendo o laudo: registre como ressalva com etapa_responsavel
+  "selecao" (vira aviso), nunca "montagem".
 """
 
 Camada = Literal["documental", "matematica", "juridica", "redacao", "visual"]
@@ -56,8 +82,8 @@ def matematica(job_id: str, pdf: Path, r: calculo.Resultado) -> list[Problema]:
     if sel_d and area is not None:
         sel = Selecao.model_validate(sel_d)
         try:
-            e = calculo.calcular(area, [x for x in sel.refs if x.escolhido],
-                                 sel.unitario_adotado, sel.faixa_pct)
+            e = calculo.calcular(area, refs_na_base(job_id, [x for x in sel.refs if x.escolhido]),
+                                 _sel_mod.unitario_valido(sel)[0], sel.faixa_pct)
             for nome in ("valor_adotado", "valor_min", "valor_max", "unitario_adotado"):
                 if getattr(e, nome) != getattr(r, nome):
                     probs.append(Problema(
@@ -78,6 +104,7 @@ def matematica(job_id: str, pdf: Path, r: calculo.Resultado) -> list[Problema]:
 
 # ------------------------------------------------------------------ diagramação (código)
 MIN_CHARS_PAGINA = 150  # texto além de cabeçalho/rodapé numa página sem imagem
+MAX_PAGINAS_OV = 19     # D-039: OV enxuta, com anexos
 # Rótulos (tabelas do imóvel/resumo) que não podem sair "n/i".
 OBRIGATORIOS_IMOVEL = ("Área do terreno", "Área construída adotada", "Tipologia / padrão",
                        "Estado de conservação", "Terreno", "Construída total (adotada no cálculo)")
@@ -154,14 +181,18 @@ def _fotos_sem_legenda(d) -> list[Problema]:
         if ini is None and not dentro:
             continue
         y0, y1 = (ini if ini is not None else -1), (fim if fim is not None else 1e9)
-        imgs += sum(1 for i in pg.get_image_info() if y0 <= i["bbox"][1] < y1)
+        # fotos de verdade: fora do cabeçalho/rodapé (a logo do cabeçalho não é foto)
+        topo, base = 75, pg.rect.height - 60
+        imgs += sum(1 for i in pg.get_image_info()
+                    if y0 <= i["bbox"][1] < y1 and topo <= i["bbox"][1] <= base
+                    and (i["bbox"][2] - i["bbox"][0]) * (i["bbox"][3] - i["bbox"][1]) > 2500)
         caps += sum(len(re.findall(r"(?m)^\s*Foto\s+\d+", b[4])) for b in blocos
                     if y0 <= b[1] < y1)
         dentro = fim is None
         if fim is not None:
             break
     if imgs > caps:
-        return [_visual(f"relatório fotográfico: {imgs} foto(s) e só {caps} legenda(s)")]
+        return [_visual(f"relatório fotográfico: {pl(imgs, 'foto', 'fotos')} e só {pl(caps, 'legenda', 'legendas')}")]
     return []
 
 
@@ -203,6 +234,13 @@ def diagramacao(job_id: str, pdf: Path) -> list[Problema]:
     de modelo ("[PREENCHER", "None", "null")."""
     probs: list[Problema] = []
     with pymupdf.open(pdf) as d:
+        # P9/P6 camada E: A4 (595 × 842 pt) e OV enxuta (D-039)
+        tams = {(round(pg.rect.width), round(pg.rect.height)) for pg in d}
+        if any(abs(w - 595) > 3 or abs(h - 842) > 3 for w, h in tams):
+            probs.append(_visual(f"página fora do A4: {sorted(tams)} pt (A4 = 595 × 842)"))
+        if _comum.trabalho(job_id).modalidade == "OV" and d.page_count > MAX_PAGINAS_OV:
+            # D-057: sem limite de páginas — só informa (nunca reprova nem volta etapa)
+            db.evento(job_id, "revisao", "info", f"laudo com {d.page_count} páginas (sem limite: D-057)")
         paginas = [_linhas(pg) for pg in d]
         cab = _cabecalho(paginas)
         for k, (pg, ls) in enumerate(zip(d, paginas), start=1):
@@ -233,26 +271,161 @@ def diagramacao(job_id: str, pdf: Path) -> list[Problema]:
     return probs
 
 
+_ANEXO_FIXO = re.compile(r"Anexo (?:I|II) – Tabela de (?:Fatores de Depreciação Ross-Heidecke|"
+                         r"Vida Útil Estimada)", re.I)
+
+
+def paginas_fixas(pdf: Path) -> list[bool]:
+    """ORDEM 008 (custo, corte "seguro"): páginas que são só as tabelas fixas do modelo
+    (Anexo I Ross-Heidecke e Anexo II Vida Útil — imagens do modelo, iguais em todo laudo)
+    não vão à IA como imagem; a diagramação em código continua conferindo essas páginas.
+    Página com a lista de anexos (item 16) ou outro conteúdo continua indo."""
+    with pymupdf.open(pdf) as d:
+        out = []
+        for pg in d:
+            t = " ".join(pg.get_text().split())
+            corpo = re.sub(r"Alan Soares.*?Pág\.\s*\d+", "", t)   # cabeçalho/rodapé
+            fixa = bool(_ANEXO_FIXO.search(t)) and not re.search(r"\b\d+\.\s+ANEXOS\b", t) \
+                and len(corpo) < 4000 and "Anexo III" not in t
+            out.append(fixa)
+    return out
+
+
+def decisoes_do_trabalho(job_id: str) -> tuple[list[str], set[str]]:
+    """083-B6: as decisões e respostas do avaliador neste trabalho (são a FONTE) e os temas que elas calam."""
+    import json as _json
+    from .. import tela_trabalho
+    linhas: list[str] = []
+    temas: set[str] = set()
+    aceitas = set(_json.loads(db.setting(f"pendencias_aceitas:{job_id}") or "[]"))
+    # 106-5 (D-068, regra do projeto, todo laudo): nada sobre dispersão dos referenciais no laudo
+    temas.add("cv")
+    linhas.append("D-068 (regra do projeto): o laudo NÃO traz nenhuma frase sobre dispersão, espalhamento, heterogeneidade "
+                  "ou variação entre os valores dos referenciais, nem coeficiente de variação ou desvio-padrão — a conta fica "
+                  "só na planilha. Aponte como problema qualquer frase desse tipo; nunca peça para incluí-la.")
+    if "decisao:amostra" in aceitas:
+        temas.add("amostra")
+        linhas.append("Amostra: o avaliador decidiu manter o referencial de localização diferente (falta de anúncios compatíveis).")
+    linhas.append("Datas de documentos (136, decisão do Capitão): o laudo NÃO traz data de emissão de documento (nem "
+                  "coluna no item 6, nem no texto, nem em legenda); não peça essa data — aponte como erro se aparecer.")
+    ctx = ((tela_trabalho._cliente(job_id) or {}).get("contexto") or {})
+    if ctx.get("idade_aparente"):
+        temas.add("idade")
+        linhas.append(f"Idade aparente: {ctx['idade_aparente']} anos, resposta do avaliador na vistoria (é a fonte); "
+                      "o laudo diz só \"idade aparente de cerca de N anos\", sem dizer como foi estimada (113-4).")
+    if ctx.get("medidas_confere"):
+        temas.add("medidas")
+        linhas.append("Medidas: o avaliador mediu na vistoria e confirmou que batem com a escritura e o cadastro "
+                      "(D-055, é a fonte da frase de compatibilidade).")
+    if ctx.get("pontos_negativos"):          # 090-5: o que o avaliador informou no relato é a fonte
+        temas.add("vizinhanca")
+        linhas.append("Pontos negativos informados pelo avaliador no relato da vistoria (são a fonte): "
+                      + "; ".join(ctx["pontos_negativos"]) + ".")
+    if ctx.get("estado_conservacao"):
+        temas.add("estado")
+        linhas.append(f"Estado de conservação: \"{ctx['estado_conservacao']}\", classificação do avaliador no relato "
+                      "(prevalece sobre a leitura das fotos).")
+    # 090-6: confirmou o valor apesar do aviso de dispersão → decidido
+    with db._conn() as c:
+        rows = c.execute("SELECT dados_json FROM av_events WHERE job=? AND etapa='selecao' AND msg LIKE "
+                         "'avaliador confirmou mesmo assim:%'", (job_id,)).fetchall()
+    if any(re.search(r"(?i)dispers|coeficiente de varia", r[0] or "") for r in rows) and "cv" not in temas:
+        temas.add("cv")
+        linhas.append("Dispersão: o avaliador confirmou o valor mesmo com o aviso de dispersão alta (decisão dele).")
+    for x in db.instrucoes_avaliador(job_id):
+        linhas.append(f"Instrução do avaliador ao confirmar o valor: {x}")
+    return linhas, temas
+
+
+def _norm(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", (s or "").lower()) if unicodedata.category(c) != "Mn")
+
+
+def contra_decisao(descricao: str, temas: set[str]) -> str:
+    """Tema decidido pelo avaliador que o problema contesta ("" se nenhum)."""
+    t = _norm(descricao)
+    if "cv" in temas and re.search(r"desvio[- ]padrao|coeficiente de variacao|\bcv\b|estatistica", t):
+        return "cv"
+    if "idade" in temas and re.search(r"\bidade (?:aparente|estimada)", t) and re.search(
+            r"sem fonte|nao tem fonte|n/i|nao informad|sem origem|de onde|fonte da idade|nao consta|sem base", t):
+        return "idade"
+    if "medidas" in temas and re.search(r"(?:medidas|trena|medicao)\b.*(?:compativ|escritura|cadastro|fonte|vistoria)"
+                                        r"|compativ\w* com a escritura", t) and re.search(
+            r"sem fonte|nao tem fonte|nao consta|sem origem|de onde|nenhum campo|sem base|nao ha registro", t):
+        return "medidas"
+    if "vizinhanca" in temas and re.search(r"festa|vizinhan|entorno", t) and re.search(
+            r"nenhum campo|sem fonte|nao tem fonte|nao consta|nao registr|sem origem|de onde", t):
+        return "vizinhanca"
+    if "estado" in temas and "estado" in t and re.search(r"nao bate|diverge|diferente|extracao registrou|registrou", t):
+        return "estado"
+    if "amostra" in temas and re.search(r"localizacao (?:diferente|distinta)|outra regiao|anglo", t):
+        return "amostra"
+    return ""
+
+
 async def rodar(job_id: str, pdf: Path, r: calculo.Resultado) -> Revisao:
     t = _comum.trabalho(job_id)
     pasta = db.pasta(job_id)
     probs = matematica(job_id, pdf, r) + diagramacao(job_id, pdf)
     pngs = await asyncio.to_thread(imagens.pdf_paginas_png, pdf, pasta / "_revisao")
-    campos = [c.model_dump(mode="json") for c in db.campos(job_id)]
-    sistema = conhecimento.texto("P0", "P3", "P6", "P7") + "\n\n" + INSTRUCAO
+    pngs = [p for p, fixa in zip(pngs, paginas_fixas(pdf)) if not fixa]
+    todos = db.campos(job_id)
+    campos = [c.model_dump(mode="json") for c in todos if c.origem != "pendente"]
+    pendentes = [c.nome for c in todos if c.origem == "pendente"]
+    sel_d = db.resultado(job_id, "selecao") or {}
+    confirmado = bool(sel_d.get("confirmado") or sel_d.get("manual"))
+    decisoes, temas = decisoes_do_trabalho(job_id)
+    sistema = conhecimento.base(job_id, ("P0", "P3", "P6", "P7", "P9"),
+                                ("revisão", "redação", "documentos", "fotos", "cálculo")) + "\n\n" + INSTRUCAO
     prompt = ("Trabalho:\n" + t.model_dump_json(indent=2, exclude={"contexto"})
-              + f"\n\nCampos do imóvel:\n{campos}"
+              + f"\n\nCampos do imóvel (documento/vistoria):\n{campos}"
+              + f"\nCampos sem fonte na extração automática: {pendentes}"
+              + ("\n\nAmostra, unitário e faixa CONFIRMADOS PELO AVALIADOR." if confirmado else "")
+              + (("\n\nDECISÕES E RESPOSTAS DO AVALIADOR NESTE TRABALHO (são a fonte; não aponte problema "
+                  "contra elas):\n" + "\n".join(f"- {x}" for x in decisoes)) if decisoes else "")
               + f"\n\nValores calculados: adotado {brl(r.valor_adotado)}; mínimo "
                 f"{brl(r.valor_min)}; máximo {brl(r.valor_max)}."
               + "\n\nTexto do PDF:\n" + _texto_pdf(pdf)[:60000])
-    resp: Revisao = await ia.perguntar(sistema, prompt, Revisao, arquivos=pngs, cwd=pasta)
+    # ORDEM 013 b: no máximo MAX_IMAGENS páginas por chamada; laudo maior vai em lotes (o
+    # texto inteiro vai em todos) e os problemas se somam
+    lotes = [pngs[i:i + imagens_ia.MAX_IMAGENS] for i in range(0, len(pngs), imagens_ia.MAX_IMAGENS)] or [[]]
+    vistos: set[str] = set()
+    probs_ia: list[Problema] = []
+    aprovado = True
+    for i, lote in enumerate(lotes, start=1):
+        extra = (f"\n\nPáginas em imagem: lote {i} de {len(lotes)} (as demais páginas são "
+                 "conferidas em outra chamada; julgue o laudo pelo texto inteiro e pelas "
+                 "páginas deste lote).") if len(lotes) > 1 else ""
+        r_lote: Revisao = await ia.perguntar(sistema, prompt + extra, Revisao, arquivos=lote, cwd=pasta)
+        aprovado = aprovado and r_lote.aprovado
+        for p in r_lote.problemas:
+            if p.descricao not in vistos:
+                vistos.add(p.descricao)
+                probs_ia.append(p)
+    resp = Revisao(aprovado=aprovado, problemas=probs_ia)
     ia_probs = [p for p in resp.problemas if p.camada != "matematica"]
+    # 083-B6: decisão gravada cala o revisor naquele ponto (vira aviso, não pendência)
+    calados = [p for p in ia_probs if contra_decisao(p.descricao, temas)]
+    for p in calados:
+        db.evento(job_id, "revisao", "aviso", f"revisor (contra decisão do avaliador, ignorado): {p.descricao}")
+    ia_probs = [p for p in ia_probs if p not in calados]
+    if calados and not ia_probs and not resp.aprovado:
+        resp = Revisao(aprovado=True, problemas=[])
+    if confirmado:
+        # escolha do avaliador: ressalva da IA sobre a amostra/unitário vira aviso
+        for p in [p for p in ia_probs if p.etapa_responsavel == "selecao"]:
+            db.evento(job_id, "selecao", "aviso", f"revisor (ressalva, decisão do avaliador): "
+                                                  f"{p.descricao}")
+        ia_probs = [p for p in ia_probs if p.etapa_responsavel != "selecao"]
+        if not ia_probs:
+            resp = Revisao(aprovado=True, problemas=[])
     if not resp.aprovado and not ia_probs:
         ia_probs = [Problema(camada="redacao", etapa_responsavel="redacao",
                              descricao="revisor reprovou sem apontar problema")]
     probs += ia_probs
     rev = Revisao(aprovado=not probs, problemas=probs)
     db.evento(job_id, "revisao", "resultado",
-              "aprovado" if rev.aprovado else f"{len(probs)} problema(s)",
+              "aprovado" if rev.aprovado else pl(len(probs), "problema", "problemas"),
               dados=rev.model_dump(mode="json"))
     return rev

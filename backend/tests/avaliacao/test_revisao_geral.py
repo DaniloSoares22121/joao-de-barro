@@ -223,38 +223,3 @@ def test_falha_fora_do_pipeline_nao_deixa_o_job_preso():
     assert j["etapa"] == "entrega" and j["status"] == orquestrador.PARCIAL
     ent = db.resultado(jid, "entrega")
     assert ent["pendencias"][0]["grave"] and "disco cheio" in ent["pendencias"][0]["texto"]
-
-
-def test_sem_coletor_cede_a_vez_quando_ha_fila(monkeypatch):
-    """Um worker só: o job que espera o Coletor não pode segurar quem só falta montar."""
-    ordem = []
-
-    async def fake_exec(j):
-        ordem.append(j)
-        if j == "espera" and ordem.count("espera") == 1:
-            return orquestrador.CEDER
-        return orquestrador.PRONTO
-
-    async def sem_espera(_s):
-        await asyncio.sleep(0)
-    monkeypatch.setattr(orquestrador, "executar", fake_exec)
-    monkeypatch.setattr(orquestrador, "_sleep", sem_espera)
-
-    async def main():
-        monkeypatch.setattr(orquestrador, "_worker", None)
-        w = orquestrador.iniciar_fila()
-        while not orquestrador._fila.empty():   # jobs antigos do banco de teste
-            orquestrador._fila.get_nowait()
-            orquestrador._fila.task_done()
-        orquestrador._ativos.clear()
-        ordem.clear()
-        orquestrador.enfileirar("espera")
-        orquestrador.enfileirar("outro")
-        for _ in range(200):
-            await asyncio.sleep(0.005)
-            if ordem.count("espera") == 2:
-                break
-        assert orquestrador.ocupado("espera") is False
-        w.cancel()
-    asyncio.run(main())
-    assert ordem[:2] == ["espera", "outro"] and ordem.count("espera") == 2

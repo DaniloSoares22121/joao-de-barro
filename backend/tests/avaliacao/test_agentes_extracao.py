@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from datetime import date
 
 from lovable.avaliacao import conhecimento, db, ia
@@ -22,7 +22,7 @@ def _job(nomes=("iptu.pdf", "planta.pdf")) -> str:
 
 
 def _mock(monkeypatch, resposta: dict, prompts: list):
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         prompts.append((sistema, prompt, arquivos))
         return esquema.model_validate(resposta)
     monkeypatch.setattr(ia, "perguntar", fake)
@@ -48,7 +48,9 @@ def test_descarta_documento_de_outro_imovel(monkeypatch):
     assert not any("planta.pdf" in c.fonte for c in r.campos)
     assert not any("planta.pdf" in c.fonte for c in db.campos(jid))
     assert db.resultado(jid, "extracao") is not None
-    assert "iptu.pdf" in pr[0][1] and "planta.pdf" in pr[0][1]
+    # ORDEM 013: a lista de arquivos vai em `arquivos` (ia.perguntar monta a lista das cópias)
+    enviados = [str(a).replace("\\", "/") for a in pr[0][2]]
+    assert "iptu.pdf" in enviados and "planta.pdf" in enviados
 
 
 def test_campo_sem_fonte_vira_pendente(monkeypatch):
@@ -85,8 +87,9 @@ def test_importar_decisoes_idempotente():
     with db._conn() as c:
         n2 = c.execute("SELECT COUNT(*) FROM av_decisions").fetchone()[0]
         codigos = [r[0] for r in c.execute("SELECT codigo FROM av_decisions")]
-    assert n1 == n2 == 25
-    assert "D-013" in codigos
+    # ORDEM 002: D-025..D-041 (42); ORDEM 011: + D-043 (43); ORDEM 026: P3 novo até D-061 (60)
+    assert n1 == n2 == 68   # ORDEM 037: + D-064, D-065; ORDEM 039: + D-082..D-086
+    assert "D-013" in codigos and "D-041" in codigos
 
 
 def test_normas_e_texto():

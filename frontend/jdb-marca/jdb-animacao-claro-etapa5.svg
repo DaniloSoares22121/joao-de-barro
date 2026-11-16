@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="160" height="160"><style>
+.bird{transform-box:view-box;transform-origin:30px 79px;animation:hop 5.6s ease-in-out infinite}
+.head{transform-box:view-box;transform-origin:34px 30px}
+.ball{animation:ball 5.6s linear infinite}
+.patch{animation:patch 5.6s ease-in-out infinite}
+@keyframes hop{
+0%{transform:translate(0,0) rotate(0)}
+6%{transform:translate(0,0) rotate(-5deg)}
+11%{transform:translate(0,0) rotate(0)}
+14%{transform:translate(2px,-6px) rotate(6deg)}
+22%{transform:translate(45px,-40px) rotate(32deg)}
+30%{transform:translate(105px,-50px) rotate(32deg)}
+30.2%{transform:translate(-85px,-50px) rotate(30deg)}
+48%{transform:translate(-40px,-30px) rotate(26deg)}
+57%{transform:translate(-8px,-6px) rotate(10deg)}
+62%{transform:translate(0,0) rotate(0)}
+67%{transform:translate(0,0) rotate(18deg)}
+71%{transform:translate(0,0) rotate(6deg)}
+75%{transform:translate(0,0) rotate(18deg)}
+80%{transform:translate(0,0) rotate(0)}
+90%{transform:translate(0,0) rotate(-5deg)}
+100%{transform:translate(0,0) rotate(0)}}
+@keyframes ball{0%,38%{opacity:0}41%,72%{opacity:1}76%,100%{opacity:0}}
+@keyframes patch{0%{opacity:1}20%,72%{opacity:0}78%,100%{opacity:1}}
+@keyframes wing{0%,12%{opacity:0}14%,60%{opacity:1}62%,100%{opacity:0}}
+@keyframes flap{0%,100%{transform:rotate(-25deg)}50%{transform:rotate(30deg)}}
+.wing{transform-box:view-box;transform-origin:24px 44px;animation:wing 5.6s linear infinite}
+.wing path{transform-box:view-box;transform-origin:24px 44px;animation:flap .45s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.bird,.ball,.patch,.wing,.wing path{animation:none}.ball,.wing{opacity:0}.bird{transform:none}}
+</style><defs><clipPath id="cl5"><path d="M-7 42.0 Q-3.5 44.2 0.0 42.0 Q3.5 39.8 7.0 42.0 Q10.5 44.2 14.0 42.0 Q17.5 39.8 21.0 42.0 Q24.5 44.2 28.0 42.0 Q31.5 39.8 35.0 42.0 Q38.5 44.2 42.0 42.0 Q45.5 39.8 49.0 42.0 Q52.5 44.2 56.0 42.0 Q59.5 39.8 63.0 42.0 Q66.5 44.2 70.0 42.0 Q73.5 39.8 77.0 42.0 Q80.5 44.2 84.0 42.0 Q87.5 39.8 91.0 42.0 Q94.5 44.2 98.0 42.0 Q101.5 39.8 105.0 42.0 L105 110 L-7 110Z"/></clipPath></defs>
+<g transform="translate(9 20) scale(.8)"><g clip-path="url(#cl5)"><g transform="translate(16 12) scale(.86)"><path d="M14 74 C14 36 34 18 54 18 C76 18 88 38 88 74 Z" fill="#B5562B"/><path d="M26 60 C30 46 40 36 54 34" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".5"/><circle cx="62" cy="54" r="11" fill="#16283A"/></g></g><g transform="translate(16 12) scale(.86)"><rect x="8" y="74" width="86" height="8" rx="4" fill="#16283A"/></g>
+<g class="bird"><g transform="translate(30 79) scale(.72) translate(-30 -79)"><g class="wing" opacity="0"><path d="M26 44 Q14 14 -2 14 Q8 34 28 50Z" fill="#9E5220" stroke="#fff" stroke-width="2.4" paint-order="stroke"/></g><g stroke="#fff" stroke-width="3.2" paint-order="stroke" stroke-linejoin="round" stroke-linecap="round">
+<path d="M17 60 L6 78 Q8 81 11 79 L23 63Z" fill="#9E5220"/>
+<path d="M18 44 Q20 30 33 31 Q42 33 40 47 Q37 62 26 66 Q15 64 18 44Z" fill="#D0843C"/>
+<path d="M33 37 Q40 42 36 54 Q32 62 27 64 Q33 52 31 40Z" fill="#F5DDB2" stroke="none"/>
+<path d="M20 44 Q22 56 28 62 Q19 60 18 50Z" fill="#9E5220" stroke="none"/>
+<circle cx="34" cy="25" r="8.5" fill="#D0843C"/>
+<path d="M36 30 Q42 32 40 37 Q35 37 34 33Z" fill="#F5DDB2" stroke="none"/>
+<path d="M41.5 22.5 L53 21.5 L41.5 26.5Z" fill="#16283A"/>
+<circle cx="37" cy="23.5" r="2.1" fill="#16283A" stroke="none"/><circle cx="37.6" cy="22.9" r=".7" fill="#fff" stroke="none"/>
+<path d="M32.5 19.8 Q36 18.2 40 20.2" stroke="#F5DDB2" stroke-width="1.4" fill="none" paint-order="normal"/>
+<path d="M25 65 L27 75 M30 64 L33 74" stroke="#4A3B33" stroke-width="2.2" paint-order="normal" fill="none"/>
+<path d="M24 75.5 L31 75.5 M30 74.5 L37 74.5" stroke="#4A3B33" stroke-width="2" paint-order="normal"/></g><circle class="ball" cx="54" cy="25" r="3.4" fill="#B5562B" stroke="#fff" stroke-width="1.2"/></g></g></g></svg>

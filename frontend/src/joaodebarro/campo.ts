@@ -30,7 +30,7 @@ export function nomeJpeg(nome: string): string {
 }
 
 // ------------------------------------------------------------------ rotas por hash
-export type TelaRota = 'lista' | 'novo' | 'job' | 'config'
+export type TelaRota = 'lista' | 'novo' | 'job' | 'config' | 'propostas' | 'plano' | 'planos' | 'clientes' | 'cliente' | 'alinhamento' | 'cadastro' | 'avaliadores' | 'regras' | 'avisos' | 'laudo' | 'assinar' | 'sistema' | 'pagamento' | 'guia' | 'compartilhar' | 'detalhes' | 'lixeira' | 'precos' | 'marca'
 export interface Rota { tela: TelaRota; jobId: string | null }
 
 /** `#/`, `#/novo`, `#/job/<id>`, `#/config` → rota; qualquer outra coisa → lista. */
@@ -38,7 +38,13 @@ export function lerHash(hash: string): Rota {
   const h = hash.replace(/^#/, '').replace(/^\/+/, '')
   const [a, b] = h.split('/')
   if (a === 'novo') return { tela: 'novo', jobId: null }
-  if (a === 'config') return { tela: 'config', jobId: null }
+  if (a === 'config' || a === 'configuracoes') return { tela: 'config', jobId: null }
+  if (a === 'propostas') return { tela: 'propostas', jobId: null }
+  if (a === 'plano') return { tela: 'plano', jobId: null }
+  if (a === 'planos') return { tela: 'planos', jobId: null }
+  if (a === 'clientes') return { tela: 'clientes', jobId: null }
+  if (a === 'cadastro' || a === 'avaliadores' || a === 'regras' || a === 'avisos' || a === 'sistema' || a === 'pagamento' || a === 'guia' || a === 'compartilhar' || a === 'lixeira' || a === 'precos' || a === 'marca') return { tela: a, jobId: null }
+  if ((a === 'cliente' || a === 'alinhamento' || a === 'laudo' || a === 'assinar' || a === 'detalhes') && b) return { tela: a, jobId: decodeURIComponent(b) }
   if (a === 'job' && b) {
     let id = b
     try { id = decodeURIComponent(b) } catch { /* mantém cru */ }
@@ -50,6 +56,12 @@ export function lerHash(hash: string): Rota {
 export function hashDe(tela: string, jobId: string | null): string {
   if (tela === 'novo') return '#/novo'
   if (tela === 'config') return '#/config'
+  if (tela === 'propostas') return '#/propostas'
+  if (tela === 'plano') return '#/plano'
+  if (tela === 'planos') return '#/planos'
+  if (tela === 'clientes') return '#/clientes'
+  if (tela === 'cadastro' || tela === 'avaliadores' || tela === 'regras' || tela === 'avisos' || tela === 'sistema' || tela === 'pagamento' || tela === 'guia' || tela === 'compartilhar' || tela === 'lixeira' || tela === 'precos' || tela === 'marca') return `#/${tela}`
+  if ((tela === 'cliente' || tela === 'alinhamento' || tela === 'laudo' || tela === 'assinar' || tela === 'detalhes') && jobId) return `#/${tela}/${encodeURIComponent(jobId)}`
   if (tela === 'job' && jobId) return `#/job/${encodeURIComponent(jobId)}`
   return '#/'
 }

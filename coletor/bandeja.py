@@ -24,7 +24,7 @@ class Bandeja:
         self.conectado = False
         self.rotulo = "Desconectado"
         self.icone = pystray.Icon(
-            "joaodebarro-coletor", _imagem("#9a9a9a"), "João de Barro — Desconectado",
+            "joaodebarro-coletor", _imagem("#9a9a9a"), "JdB Laudo — Desconectado",
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _i: self.rotulo,
                                  None, enabled=False),
@@ -43,10 +43,10 @@ class Bandeja:
         self.rotulo = texto
         try:
             self.icone.icon = _imagem(cor)
-            self.icone.title = "João de Barro — " + texto
+            self.icone.title = "JdB Laudo — " + texto
             if isinstance(conectado, str):
                 self.icone.notify("Token recusado: abra o coletor com --parear e cole um código novo.",
-                                  "João de Barro — " + texto)
+                                  "JdB Laudo — " + texto)
             self.icone.update_menu()
         except Exception:
             pass

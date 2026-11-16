@@ -4,6 +4,10 @@ export const MODALIDADES_VALIDAS = ['OV', 'AM', 'AM_GARANTIA', 'AMJ'] as const
 export const MAX_BYTES = 50 * 1024 * 1024
 export const MSG_ARQUIVO_GRANDE = 'arquivo acima de 50 MB'
 
+export const AJUDA_OBS_VISTORIA = 'Entra no laudo como dado de vistoria.'
+export const AJUDA_CHECKLIST =
+  'Cole o texto do botão "Copiar para o JdB". Linhas marcadas "Só contexto" não entram no laudo.'
+
 export interface FormTrabalho {
   numero: string
   modalidade: string
@@ -16,6 +20,16 @@ export interface FormTrabalho {
   data_base: string
   data_vistoria: string
   contexto: string
+  /** Observações da vistoria (entram no laudo como dado de vistoria). */
+  obs_vistoria: string
+  /** Texto colado do checklist do celular. */
+  checklist_vistoria: string
+  /** "AAAA-MM-DD"; vazio → null no payload. */
+  data_emissao: string
+  /** D-043: vistoria feita por parceiro ("Nome, CRECI/CNAI nº"); vazio = vistoria do avaliador. */
+  visita_por: string
+  /** ORDEM 032-2: parte do imóvel avaliada (ex.: "Galpão 01"); vazio = imóvel inteiro. */
+  objeto_parte: string
   // AMJ (processo opcional em AM)
   processo_numero: string
   vara_juizo: string
@@ -33,6 +47,7 @@ export function formVazio(hoje: string = hojeISO()): FormTrabalho {
   return {
     numero: '', modalidade: '', finalidade: '', cliente: '', tipo: '', bairro: '', cidade: '',
     pin_maps: '', data_base: hoje, data_vistoria: '', contexto: '',
+    obs_vistoria: '', checklist_vistoria: '', data_emissao: hoje, visita_por: '', objeto_parte: '',
     processo_numero: '', vara_juizo: '', acao: '', autor: '', reu: '', quesitos: '',
   }
 }
@@ -107,6 +122,8 @@ export function validar(form: FormTrabalho): Erros {
   if (!form.data_vistoria) e.data_vistoria = 'Informe a data da vistoria.'
   else if (!dataISOValida(form.data_vistoria)) e.data_vistoria = 'Data da vistoria inválida.'
 
+  if (form.data_emissao && !dataISOValida(form.data_emissao)) e.data_emissao = 'Data de emissão inválida.'
+
   return e
 }
 
@@ -124,9 +141,16 @@ export function paraPayload(form: FormTrabalho) {
     data_base: form.data_base,
     data_vistoria: form.data_vistoria,
     contexto: form.contexto.trim(),
+    obs_vistoria: form.obs_vistoria.trim(),
+    checklist_vistoria: form.checklist_vistoria.trim(),
+    data_emissao: form.data_emissao || null,
+    visita_por: form.visita_por.trim(),
+    objeto_parte: form.objeto_parte.trim(),
     ...dadosProcesso(form),
   }
 }
+
+export const AJUDA_VISITA_POR = 'Só se outra pessoa fez a visita técnica. Ex.: "João da Silva, CRECI 12345/GO". O laudo diz que a visita foi feita por ela, sob sua responsabilidade técnica (D-043). Vazio = você fez a vistoria.'
 
 /** Quesitos digitados um por linha (linhas vazias ignoradas). */
 export function quesitosLista(texto: string): string[] {

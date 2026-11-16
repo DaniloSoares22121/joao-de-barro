@@ -1,29 +1,18 @@
-"""Contas e sessão do servidor do João de Barro.
-
-Senha com PBKDF2-SHA256; sessão = token HMAC-SHA256 (id.expira.assinatura) assinado com um
-segredo gerado na primeira subida e guardado no banco. Sem JWT, sem dependência externa."""
+"""Autenticação local mínima (substitui a do Brixly): usuários no app.db, senha com PBKDF2
+e token Bearer assinado com HMAC."""
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
-import os
 import secrets
 import sqlite3
+import threading
 import time
-from datetime import datetime, timezone
 
 from . import config
 
-VALIDADE_S = 30 * 24 * 3600
-_ITER = 240_000
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, pwd TEXT NOT NULL,
-    blocked INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-"""
+TOKEN_DIAS = 30
 
 
 def _conn() -> sqlite3.Connection:
@@ -32,113 +21,104 @@ def _conn() -> sqlite3.Connection:
     return c
 
 
+def _segredo() -> bytes:
+    p = config.DATA_DIR / "segredo.key"
+    if not p.exists():
+        p.write_bytes(secrets.token_bytes(32))
+    return p.read_bytes()
+
+
 def init() -> None:
     with _conn() as c:
-        c.execute("PRAGMA journal_mode=WAL")
-        c.executescript(_SCHEMA)
+        c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                  "email TEXT NOT NULL UNIQUE, senha TEXT NOT NULL, blocked INTEGER NOT NULL DEFAULT 0)")
 
 
-def _segredo() -> bytes:
+def _hash(senha: str, sal: bytes | None = None) -> str:
+    sal = sal or secrets.token_bytes(16)
+    h = hashlib.pbkdf2_hmac("sha256", senha.encode(), sal, 200_000)
+    return f"{sal.hex()}${h.hex()}"
+
+
+def _confere(senha: str, guardado: str) -> bool:
+    sal, _, h = guardado.partition("$")
+    return hmac.compare_digest(_hash(senha, bytes.fromhex(sal)).split("$")[1], h)
+
+
+def criar_usuario(email: str, senha: str) -> int:
     with _conn() as c:
-        r = c.execute("SELECT v FROM kv WHERE k='secret'").fetchone()
-        if r:
-            return r["v"].encode()
-        s = secrets.token_urlsafe(48)
-        c.execute("INSERT OR IGNORE INTO kv (k, v) VALUES ('secret', ?)", (s,))
-        return c.execute("SELECT v FROM kv WHERE k='secret'").fetchone()["v"].encode()
+        cur = c.execute("INSERT INTO users (email, senha) VALUES (?, ?)",
+                        (email.strip().casefold(), _hash(senha)))
+        return int(cur.lastrowid)
 
 
-# ------------------------------------------------------------------ senha
-def _hash_pwd(pwd: str, sal: bytes | None = None) -> str:
-    sal = sal or os.urandom(16)
-    h = hashlib.pbkdf2_hmac("sha256", pwd.encode(), sal, _ITER)
-    return f"pbkdf2${_ITER}${sal.hex()}${h.hex()}"
+def _linha(r) -> dict | None:
+    return {"id": r["id"], "email": r["email"], "blocked": bool(r["blocked"])} if r else None
 
 
-def _confere(pwd: str, guardado: str) -> bool:
-    try:
-        _, it, sal, h = guardado.split("$")
-        novo = hashlib.pbkdf2_hmac("sha256", pwd.encode(), bytes.fromhex(sal), int(it))
-    except (ValueError, TypeError):
-        return False
-    return hmac.compare_digest(novo.hex(), h)
-
-
-# ------------------------------------------------------------------ usuários
-def _row_to_user(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "email": r["email"], "blocked": bool(r["blocked"])}
-
-
-def get_user(user_id: int) -> dict | None:
+def get_user(uid: int) -> dict | None:
     with _conn() as c:
-        r = c.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    return _row_to_user(r) if r else None
+        return _linha(c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
 
 
 def user_by_email(email: str) -> dict | None:
     with _conn() as c:
-        r = c.execute("SELECT * FROM users WHERE email=?", ((email or "").strip().lower(),)).fetchone()
-    return _row_to_user(r) if r else None
+        return _linha(c.execute("SELECT * FROM users WHERE email=?",
+                                (email.strip().casefold(),)).fetchone())
 
 
-def criar_ou_trocar_senha(email: str, pwd: str) -> int:
-    """Cria a conta (ou troca a senha da existente). Devolve o id."""
-    email = (email or "").strip().lower()
-    if "@" not in email or len(pwd or "") < 6:
-        raise ValueError("E-mail inválido ou senha muito curta (mín. 6).")
-    init()
+def login(email: str, senha: str) -> str | None:
     with _conn() as c:
-        c.execute("INSERT INTO users (email, pwd, created_at) VALUES (?,?,?) "
-                  "ON CONFLICT(email) DO UPDATE SET pwd=excluded.pwd",
-                  (email, _hash_pwd(pwd), datetime.now(timezone.utc).isoformat()))
-        return c.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()["id"]
-
-
-def entrar(email: str, pwd: str) -> str | None:
-    """Token da sessão, ou None se e-mail/senha não conferem."""
-    with _conn() as c:
-        r = c.execute("SELECT * FROM users WHERE email=?", ((email or "").strip().lower(),)).fetchone()
-    if not r or r["blocked"] or not _confere(pwd or "", r["pwd"]):
+        r = c.execute("SELECT * FROM users WHERE email=?", (email.strip().casefold(),)).fetchone()
+    if not r or r["blocked"] or not _confere(senha, r["senha"]):
         return None
-    return token_de(r["id"])
+    return make_token(r["id"])
 
 
-# ------------------------------------------------------------------ token
-def _b64(b: bytes) -> str:
-    return base64.urlsafe_b64encode(b).decode().rstrip("=")
+def _assinar(corpo: str) -> str:
+    return base64.urlsafe_b64encode(hmac.new(_segredo(), corpo.encode(), hashlib.sha256).digest()).decode().rstrip("=")
 
 
-def token_de(user_id: int) -> str:
-    corpo = f"{user_id}.{int(time.time()) + VALIDADE_S}"
-    return f"{corpo}.{_b64(hmac.new(_segredo(), corpo.encode(), hashlib.sha256).digest())}"
-
-
-make_token = token_de
+def make_token(uid: int) -> str:
+    corpo = f"{uid}.{int(time.time()) + TOKEN_DIAS * 86400}"
+    return f"{corpo}.{_assinar(corpo)}"
 
 
 def user_id_from_token(token: str) -> int | None:
     try:
-        uid, exp, sig = (token or "").split(".")
-        corpo = f"{uid}.{exp}"
-        bom = _b64(hmac.new(_segredo(), corpo.encode(), hashlib.sha256).digest())
-        if not hmac.compare_digest(sig, bom) or int(exp) < time.time():
+        uid, exp, sig = token.split(".")
+        if not hmac.compare_digest(sig, _assinar(f"{uid}.{exp}")) or int(exp) < time.time():
             return None
         return int(uid)
     except (ValueError, TypeError):
         return None
 
 
-# ------------------------------------------------------------------ limite de tentativas
-def rate_limit(key: str, limit: int, window_s: int) -> bool:
-    """Janela fixa. True se permitido (e conta), False se estourou. Incremento atômico."""
-    win = int(time.time()) // max(1, window_s)
-    k = f"rl:{key}:{win}"
-    with _conn() as c:
-        c.execute("INSERT INTO kv (k, v) VALUES (?, '1') "
-                  "ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1", (k,))
-        n = int(c.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()["v"])
-        if n == 1:  # janela nova: limpa as antigas
-            c.execute("DELETE FROM kv WHERE k LIKE 'rl:%' AND k != ? AND "
-                      "CAST(substr(k, length(rtrim(k, '0123456789')) + 1) AS INTEGER) < ?",
-                      (k, win - 2))
-    return n <= limit
+def admin_make_token() -> str:
+    corpo = f"admin.{int(time.time()) + 3600}"
+    return f"{corpo}.{_assinar(corpo)}"
+
+
+def admin_ok(token: str) -> bool:
+    try:
+        a, exp, sig = token.split(".")
+        return a == "admin" and hmac.compare_digest(sig, _assinar(f"{a}.{exp}")) and int(exp) >= time.time()
+    except ValueError:
+        return False
+
+
+_lock = threading.Lock()
+_janelas: dict[str, list[float]] = {}
+
+
+def rate_limit(chave: str, maximo: int, janela_s: int) -> bool:
+    """True se ainda cabe mais uma tentativa na janela (e registra a tentativa)."""
+    agora = time.time()
+    with _lock:
+        ts = [t for t in _janelas.get(chave, []) if agora - t < janela_s]
+        if len(ts) >= maximo:
+            _janelas[chave] = ts
+            return False
+        ts.append(agora)
+        _janelas[chave] = ts
+        return True

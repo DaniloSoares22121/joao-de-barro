@@ -1,4 +1,4 @@
-/* João de Barro — cliente da API do avaliador (/api/avaliacao/*).
+/* JdB — cliente da API do avaliador (/api/avaliacao/*).
  * Login usa a conta Brixly (/api/auth/login); o token fica em localStorage "jdb_token". */
 import { comRetry } from './campo'
 import { useStore } from './store'
@@ -24,12 +24,13 @@ function detalhe(corpo: unknown, status: number): string {
   return `Erro ${status}`
 }
 
-/** 401 → limpa a sessão e volta ao login; 403 → tela "acesso restrito ao avaliador". */
-function tratarAuth(status: number) {
+/** 401 → limpa a sessão e volta ao login; 403 na checagem da sessão → tela "acesso restrito ao avaliador".
+ * 185: um 403 de uma parte só do dono (ex.: Curadoria) não tranca o sistema inteiro do avaliador comum. */
+function tratarAuth(status: number, path = '') {
   if (status === 401) {
     token.limpar()
     useStore.getState().sair()
-  } else if (status === 403) {
+  } else if (status === 403 && path === '/proximo-numero') {
     useStore.getState().negar()
   }
 }
@@ -46,15 +47,44 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   })
   const corpo = await r.json().catch(() => ({}))
   if (!r.ok) {
-    tratarAuth(r.status)
+    tratarAuth(r.status, path)
     throw new ApiError(r.status, detalhe(corpo, r.status))
   }
   return corpo as T
 }
 
 export const get = <T>(path: string) => req<T>('GET', path)
-export const post = <T>(path: string, body?: unknown) => req<T>('POST', path, body ?? {})
+export const post = async <T>(path: string, body?: unknown): Promise<T> => {
+  try {
+    return await req<T>('POST', path, body ?? {})
+  } catch (e) {
+    // 155-1: o plano não tem mais laudo incluído — o servidor avisa ANTES de a IA começar (402, com o preço do extra).
+    // O avaliador confirma ali mesmo; sem confirmar, nada começa.
+    if (e instanceof ApiError && e.status === 402 && !/aceito_extra=/.test(path)) {
+      if (window.confirm(e.detail)) return req<T>('POST', `${path}${path.includes('?') ? '&' : '?'}aceito_extra=true`, body ?? {})
+      throw new ApiError(402, 'Não comecei: o trabalho fica parado até você confirmar o laudo extra.')
+    }
+    throw e
+  }
+}
 export const put = <T>(path: string, body?: unknown) => req<T>('PUT', path, body ?? {})
+export const del = <T>(path: string) => req<T>('DELETE', path)
+
+/** POST multipart/form-data autenticado (o navegador define o Content-Type com o boundary). */
+export async function postForm<T>(path: string, fd: FormData): Promise<T> {
+  const t = token.get()
+  const r = await fetch(BASE + path, {
+    method: 'POST',
+    headers: t ? { Authorization: `Bearer ${t}` } : {},
+    body: fd,
+  })
+  const corpo = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    tratarAuth(r.status)
+    throw new ApiError(r.status, detalhe(corpo, r.status))
+  }
+  return corpo as T
+}
 
 export async function login(email: string, password: string): Promise<void> {
   const r = await fetch('/api/auth/login', {

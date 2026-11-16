@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "Enviar ao JdB",
+  "version": "1.2.4",
+  "description": "Botão “Enviar ao JdB” na página do anúncio (ZAP, Viva Real, OLX, Imovelweb e outros portais) e no ícone da barra: manda o anúncio, com foto, dados e data de acesso, para um trabalho do JdB Laudo.",
+  "action": {
+    "default_title": "Enviar ao JdB",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icones/jdb-cor-16.png",
+      "32": "icones/jdb-cor-32.png"
+    }
+  },
+  "options_page": "opcoes.html",
+  "background": {
+    "service_worker": "fundo.js"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://joaodebarro.brixly.com.br/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://joaodebarro.brixly.com.br/*"
+      ],
+      "js": [
+        "ligar.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "icons": {
+    "16": "icones/jdb-cor-16.png",
+    "32": "icones/jdb-cor-32.png",
+    "48": "icones/jdb-cor-48.png",
+    "128": "icones/jdb-cor-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icones/jdb-escuro-48.png"
+      ],
+      "matches": [
+        "https://*.zapimoveis.com.br/*",
+        "https://*.vivareal.com.br/*",
+        "https://*.olx.com.br/*",
+        "https://*.imovelweb.com.br/*",
+        "https://*.62imoveis.com.br/*",
+        "https://*.deztop.com.br/*",
+        "https://*.chavesnamao.com.br/*",
+        "https://*.mitula.com.br/*",
+        "https://*.deztop.com/*"
+      ]
+    }
+  ]
+}

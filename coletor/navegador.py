@@ -7,7 +7,7 @@ import logging
 import random
 import time
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 log = logging.getLogger("coletor")
 
@@ -17,16 +17,16 @@ LARGURA = 1366            # viewport (print sai <= 1600 px)
 JPEG, PNG = b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n"
 
 # Domínios que o coletor aceita abrir (qualquer subdomínio).
-DOMINIOS = ("zapimoveis.com.br", "vivareal.com.br", "olx.com.br", "imovelweb.com.br")
+DOMINIOS: tuple[str, ...] = ()   # 112: nenhum portal (a busca automática saiu); só o Google Maps
 MAPS = (("google.com", "/maps"), ("google.com.br", "/maps"), ("maps.app.goo.gl", ""))
 
-# CDNs de imagem aceitas por portal (o próprio domínio + CDNs conhecidas dele).
-CDNS_IMAGEM = {
-    "zapimoveis.com.br": ("zapimoveis.com.br", "vivareal.com.br", "grupozap.com"),
-    "vivareal.com.br": ("vivareal.com.br", "vivareal.com", "zapimoveis.com.br", "grupozap.com"),
-    "olx.com.br": ("olx.com.br", "olxcdn.com"),   # img.olx.com.br
-    "imovelweb.com.br": ("imovelweb.com.br", "imovelwebcdn.com", "naventcdn.com", "zonapropcdn.com"),
-}
+
+# ORDEM 018: na verificação ("Confirme que é humano", "Just a moment") a janela vem para a frente e
+# o Coletor ESPERA a pessoa resolver (ou a verificação passar sozinha). Não clica nem contorna.
+ESPERA_DESAFIO_S = 120.0
+PASSO_DESAFIO_S = 2.0
+# bloqueio que nenhuma pessoa resolve na hora: não adianta esperar
+SINAIS_DEFINITIVO = ("you have been blocked", "você foi bloqueado", "voce foi bloqueado")
 
 SINAIS_BLOQUEIO = ("captcha", "não sou um robô", "nao sou um robo", "acesso negado",
                    "access denied", "just a moment", "verify you are human",
@@ -54,34 +54,9 @@ def url_permitida(url: str) -> bool:
     return False
 
 
-def foto_permitida(url_foto: str, url_pagina: str) -> bool:
-    """https e do mesmo portal do anúncio (ou CDN conhecida dele)."""
-    try:
-        f, pg = urlsplit(url_foto or ""), urlsplit(url_pagina or "")
-        hf, hp = (f.hostname or "").lower(), (pg.hostname or "").lower()
-    except ValueError:
-        return False
-    if f.scheme != "https" or not hf:
-        return False
-    for portal, cdns in CDNS_IMAGEM.items():
-        if _sob(hp, portal):
-            return any(_sob(hf, c) for c in cdns)
-    return False
-
-
-def _jpeg_ou_png(dados: bytes) -> bytes | None:
-    if dados.startswith((JPEG, PNG)):
-        return dados
-    try:
-        import io
-        from PIL import Image
-        with Image.open(io.BytesIO(dados)) as im:
-            out = io.BytesIO()
-            im.convert("RGB").save(out, "JPEG", quality=80)
-        b = out.getvalue()
-        return b if len(b) <= MAX_IMAGEM else None
-    except Exception:
-        return None
+def permitida_para(acao: str, url: str) -> bool:
+    """112: o Coletor só abre o Google Maps (a busca nos portais e na internet saiu)."""
+    return acao == "maps" and url_permitida(url)
 
 
 async def bloqueado(pagina, status: int | None = None) -> bool:
@@ -105,6 +80,63 @@ async def bloqueado(pagina, status: int | None = None) -> bool:
         return False
 
 
+async def _definitivo(pagina) -> bool:
+    try:
+        texto = (await pagina.evaluate("() => document.body ? document.body.innerText : ''") or "")
+    except Exception:
+        return False
+    t = texto.lower()[:20_000]
+    return any(s in t for s in SINAIS_DEFINITIVO)
+
+
+async def esperar_liberacao(pagina, status: dict, limite: float = ESPERA_DESAFIO_S,
+                            passo: float = PASSO_DESAFIO_S, dormir=asyncio.sleep,
+                            agora=time.monotonic) -> bool:
+    """O portal mostrou uma verificação: traz a janela à frente e espera até `limite` s a PESSOA
+    resolver (ou a verificação passar sozinha). True = a página do portal apareceu. O Coletor não
+    clica, não resolve e não contorna nada. `status["s"]` é atualizado a cada documento novo."""
+    if limite <= 0 or await _definitivo(pagina):
+        return False
+    try:
+        await pagina.bring_to_front()
+    except Exception:
+        pass
+    log.info("verificação do portal: esperando a pessoa resolver (até %d s)", int(limite))
+    fim = agora() + limite
+    while agora() < fim:
+        await dormir(passo)
+        try:
+            if pagina.is_closed():
+                return False
+        except Exception:
+            return False
+        if not await bloqueado(pagina, status.get("s")):
+            log.info("verificação resolvida: seguindo a coleta")
+            return True
+        if await _definitivo(pagina):
+            return False
+    return False
+
+
+async def resposta_bloqueio(pagina, status: dict) -> dict:
+    """Resultado de portal bloqueado com o título e o print do que apareceu (para o avaliador
+    ver se era uma verificação que ele mesmo pode resolver)."""
+    titulo = ""
+    try:
+        titulo = (await pagina.title() or "").strip()
+    except Exception:
+        pass
+    res = {"ok": False, "bloqueado": True, "url_final": pagina.url,
+           "erro": f"bloqueado: {titulo}"[:300] if titulo else "bloqueado", "status": status.get("s")}
+    try:
+        shot = await pagina.screenshot(type="jpeg", quality=70)
+        if len(shot) <= MAX_IMAGEM:
+            res["print_b64"] = base64.b64encode(shot).decode()
+    except Exception:
+        pass
+    return res
+
+
 JS_COLETA = """() => ({
   texto: document.body ? document.body.innerText : '',
   links: [...new Set([...document.querySelectorAll('a[href]')].map(a => a.href)
@@ -124,8 +156,10 @@ def _recusada(url_final: str) -> dict:
 
 class Navegador:
     def __init__(self, perfil: Path | str, pausa: tuple[float, float] = (4, 9),
-                 headless: bool = False, canal: str | None = "chrome", permitir=url_permitida):
+                 headless: bool = False, canal: str | None = "chrome", permitir=url_permitida,
+                 espera_desafio: float = ESPERA_DESAFIO_S):
         self.perfil, self.pausa, self.headless, self.canal = Path(perfil), pausa, headless, canal
+        self.espera_desafio = 0 if headless else espera_desafio   # sem janela, ninguém resolve
         self.permitir = permitir     # allowlist de navegação do quadro principal
         self._pw = self._ctx = None
         self._ultima = 0.0
@@ -156,40 +190,6 @@ class Navegador:
         if falta > 0:
             await asyncio.sleep(falta)
 
-    async def _baixar_foto(self, pagina, candidatas: list[str], url_pagina: str) -> str | None:
-        """1ª foto válida do anúncio: https, domínio do portal/CDN, <= 5 MB, 20 s no total.
-        Os portais servem WebP: converte para JPEG (q=80) quando não for JPEG/PNG."""
-        urls = [u for u in candidatas if foto_permitida(u, url_pagina)
-                and not urlsplit(u).path.lower().endswith((".svg", ".gif"))][:3]
-
-        async def _get():
-            for url in urls:
-                r = None
-                for _ in range(4):   # até 3 redirecionamentos, cada destino checado
-                    r = await pagina.request.get(url, timeout=20_000, max_redirects=0)
-                    if 300 <= r.status < 400 and r.headers.get("location"):
-                        url = urljoin(url, r.headers["location"])
-                        if not foto_permitida(url, url_pagina):
-                            r = None
-                            break
-                        continue
-                    break
-                if (r is not None and r.ok
-                        and int(r.headers.get("content-length") or 0) <= MAX_IMAGEM):
-                    dados = await r.body()
-                    if dados and len(dados) <= MAX_IMAGEM:
-                        dados = _jpeg_ou_png(dados)
-                        if dados:
-                            return dados
-            return None
-        if not urls:
-            return None
-        try:
-            dados = await asyncio.wait_for(_get(), 20)
-        except Exception as e:
-            log.info("foto não baixada (%s): %s", urls[0][:120], e)
-            return None
-        return base64.b64encode(dados).decode() if dados else None
 
     async def _nova_pagina(self):
         """Aba nova. A janela do Chrome é visível: se a pessoa fechou, reabre o navegador em
@@ -206,7 +206,8 @@ class Navegador:
             await self.abrir()
             return await self._ctx.new_page()
 
-    async def capturar(self, url: str, acao: str = "busca") -> dict:
+    async def capturar(self, url: str, acao: str = "maps") -> dict:
+        permitir = self.permitir
         await self._ritmo()
         try:
             pagina = await self._nova_pagina()
@@ -220,7 +221,7 @@ class Navegador:
             async def _rota(route):
                 req = route.request
                 if (req.is_navigation_request() and req.frame.parent_frame is None
-                        and not self.permitir(req.url)):
+                        and not permitir(req.url)):
                     recusadas.append(req.url)
                     await route.abort("blockedbyclient")
                 else:
@@ -234,7 +235,7 @@ class Navegador:
 
             def _req(req):   # redirecionamento HTTP (o route não vê) para fora da lista
                 if (req.redirected_from is not None and req.is_navigation_request()
-                        and req.frame == pagina.main_frame and not self.permitir(req.url)):
+                        and req.frame == pagina.main_frame and not permitir(req.url)):
                     recusadas.append(req.url)
                     asyncio.ensure_future(pagina.close())
             pagina.on("request", _req)
@@ -244,27 +245,50 @@ class Navegador:
                 except Exception:
                     if recusadas:
                         return _recusada(pagina.url or url)
-                    if status.get("s") in (403, 429):
-                        return {"ok": False, "bloqueado": True, "url_final": pagina.url or url,
-                                "erro": "bloqueado"}
-                    raise
+                    if status.get("s") not in (403, 429):
+                        raise
+                    if not permitir(pagina.url):   # nem chegou a mostrar a página
+                        return {"ok": False, "bloqueado": True, "url_final": url,
+                                "erro": "bloqueado", "status": status.get("s")}
+                    # 403/429 com a página na tela: pode ser a verificação (abaixo)
                 try:
                     await pagina.wait_for_load_state("networkidle", timeout=8_000)
                 except Exception:
                     pass
             finally:
                 self._ultima = time.monotonic()
-            if recusadas or not self.permitir(pagina.url):
+            if recusadas or not permitir(pagina.url):
                 return _recusada(pagina.url)
             if await bloqueado(pagina, status.get("s")):
-                return {"ok": False, "bloqueado": True, "url_final": pagina.url,
-                        "erro": "bloqueado", "status": status.get("s")}
+                if not await esperar_liberacao(pagina, status, self.espera_desafio):
+                    return await resposta_bloqueio(pagina, status)
+                try:   # a verificação passou: a página do portal recarrega
+                    await pagina.wait_for_load_state("domcontentloaded", timeout=15_000)
+                    await pagina.wait_for_load_state("networkidle", timeout=8_000)
+                except Exception:
+                    pass
+                if recusadas or not permitir(pagina.url):
+                    return _recusada(pagina.url)
             pausa = (0.6, 1.6) if self.pausa[1] > 0 else (0, 0)
-            for _ in range(3):
-                await pagina.mouse.wheel(0, 900)
-                await asyncio.sleep(random.uniform(*pausa))
+            if acao == "maps":
+                # ORDEM 032-4: o painel lateral do lugar cobria o lote (o contorno saía cortado
+                # no 7.1): recolhe o painel (botão do próprio Maps) antes do print
+                try:
+                    bt = pagina.locator('button[aria-label="Recolher painel lateral"], '
+                                        'button[aria-label="Collapse side panel"]').first
+                    if await bt.count():
+                        await bt.click(timeout=3_000)
+                        await asyncio.sleep(1.0)
+                except Exception:
+                    pass
+                # no Maps a rodinha AFASTA o zoom (o lote saía minúsculo) e o mouse parado
+                # sobre a interface deixava uma dica ("Recolher painel lateral") no print:
+                # sem rolagem, mouse no canto e tempo para as imagens de satélite carregarem
+                await pagina.mouse.move(LARGURA - 5, 895)
+                if pausa[1] > 0:
+                    await asyncio.sleep(2.5)
             dados = await pagina.evaluate(JS_COLETA)
-            if recusadas or not self.permitir(pagina.url):   # navegou no meio da rolagem
+            if recusadas or not permitir(pagina.url):   # navegou no meio da rolagem
                 return _recusada(pagina.url)
             og = dados.get("og") or ""
             fotos = ([og] if og.startswith("http") else []) + [i for i in dados["imgs"] if i != og]
@@ -274,10 +298,6 @@ class Navegador:
                    "fotos": fotos[:30], "erro": None, "status": status.get("s")}
             if len(shot) <= MAX_IMAGEM:
                 res["print_b64"] = base64.b64encode(shot).decode()
-            if acao == "anuncio" and fotos:
-                b64 = await self._baixar_foto(pagina, fotos, pagina.url)
-                if b64:
-                    res["fotos_b64"] = [b64]
             return res
         except Exception as e:
             log.exception("captura falhou: %s", url)

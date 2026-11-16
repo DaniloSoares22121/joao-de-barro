@@ -1,0 +1,234 @@
+[
+ {
+  "texto": "revisor (documental/redação): O endereço não é o mesmo em todo o laudo. Na capa (pág. 1) e no Resumo (item 12, pág. 13) aparece 'Rua Exemplo, Quadra 00, Lote 00, Bairro Exemplo, Goiânia – GO, Bairro Exemplo.', com o bairro escrito duas vezes e o 'Bairro Exemplo' depois da cidade e da UF. No item 7.1 (pág. 4) está só 'Bairro Exemplo'. A escritura, o IPTU e o ITCD trazem 'Bairro Exemplo'. Apenas a fatura da Saneago traz 'Bairro Exemplo'. Corrigir: usar na capa e no resumo o mesmo endereço do 7.1, sem o '…, Bairro Exemplo.' no final.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): As datas não fecham. A emissão é de 14/11/2026: a assinatura diz 'Goiânia, 14 de novembro de 2026.' (pág. 13). Mas o item 9 (pág. 9) diz 'Consulta realizada em 15/11/2026', e o pressuposto do item 11 (pág. 12) cita 'pesquisa de mercado (15/11/2026)'. A pesquisa não pode ser posterior à emissão do parecer. Corrigir: alinhar a data de emissão e a data da consulta aos anúncios conforme o que de fato ocorreu. A data de emissão também conta para a validade de 90 dias.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/montagem): No quadro do item 6 (pág. 3), o documento 05 ('Consulta ao cadastro imobiliário – Mapa Digital Fácil') está com a data '—'. A legenda do Anexo III (pág. 25) registra a consulta em 14/11/2026 às 23:27. A regra P9 pede uma data para cada documento. Corrigir: preencher '14/11/2026' no quadro.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (redação/redação): O item 2 (pág. 2) repete a palavra: o título é '2. NÚMERO DO PARECER PTAM' e o texto diz 'PTAM PTAM N.º 9120.' (sobra de cópia). Corrigir: texto 'PTAM N.º 9120.' e título '2. NÚMERO DO PARECER' (o sumário também precisa ser atualizado).",
+  "grave": true
+ },
+ {
+  "texto": "revisor (visual/montagem): O bloco do valor ficou partido entre as páginas. A justificativa ('adota-se o valor unitário…') começa no fim da pág. 10. A pág. 11 tem só cerca de 6 linhas e o resto em branco (uns 75% da folha). A memória de cálculo, a caixa do valor e o quadro da faixa estão na pág. 12. Isso contraria o D-018/P9 (bloco do valor sem quebra entre páginas). Corrigir: refazer a paginação para que justificativa, memória em 3 linhas, caixa azul e quadro mín./adotado/máx. fiquem juntos, sem o grande espaço em branco na pág. 11.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (redação/redação): O texto diz que a vizinhança foi levada em conta, mas o cálculo não mostra isso. O item 7.1 (pág. 4) diz 'Essa característica do entorno foi considerada na análise mercadológica' (casas de festas), e os itens 8 e 10 repetem a ideia. Porém o unitário adotado é a média simples, sem nenhum fator ou ajuste ligado a esse ponto. Um assistente técnico da outra parte (ou o auditor fiscal) pode questionar onde essa consideração aparece no valor (princípio 7 do K0: não declarar ato que não aconteceu). Sugestão: trocar por 'característica de vizinhança registrada na vistoria' ou explicar de que forma ela foi levada em conta, sem dizer que houve ajuste.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): O endereço não é igual em todo o laudo. Na capa (pág. 1) e no Resumo (item 12, pág. 13) está escrito 'Rua Exemplo, Quadra 00, Lote 00, Bairro Exemplo, Goiânia – GO, Bairro Exemplo.', com o bairro repetido depois da cidade e na forma 'Bairro Exemplo'. Essa forma só aparece na fatura da Saneago. O item 7.1 (pág. 4) traz 'Rua Exemplo, Quadra 00, Lote 00, Bairro Exemplo, município de Goiânia/GO, CEP 00000-000'. A escritura e o IPTU escrevem 'Bairro Exemplo'. Usar o mesmo endereço documental na capa, no 7.1 e no resumo, sem o trecho final ', Bairro Exemplo'.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): As datas não fecham. O item 9 (pág. 9) diz 'Consulta realizada em 15/11/2026', e a ressalva do item 11 (pág. 12) cita 'pesquisa de mercado (15/11/2026)'. Já a emissão e a assinatura (item 15, pág. 13) são de 'Goiânia, 14 de novembro de 2026'. Uma pesquisa feita depois da data de emissão não se sustenta. É preciso acertar a data da pesquisa ou a data de emissão e assinatura, conforme o registro real.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (documental/redação): No quadro da Documentação Analisada (item 6, pág. 3), o documento 05, 'Consulta ao cadastro imobiliário – Mapa Digital Fácil', está sem data ('—'). O Anexo III (pág. 25) mostra a consulta feita em 14/11/2026 às 23:27. A regra pede uma data por documento, então essa data deve entrar no quadro.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (visual/montagem): O Anexo III não segue a ordem do quadro do item 6. No quadro a ordem é 01 Escritura, 02 IPTU 2025, 03 Comunicado ITCD com anexo, 04 Relatório FIPE, 05 Mapa Digital Fácil, 06 Fatura Saneago. No Anexo III é Saneago (pág. 19), Escritura (pág. 20), Anexo do comunicado (pág. 21), Comunicado (pág. 22), IPTU (pág. 23), FIPE (pág. 24) e Mapa Digital Fácil (pág. 25). O checklist P6 pede os documentos nos anexos na mesma ordem do item 6.",
+  "grave": true
+ },
+ {
+  "texto": "revisor (redação/redação): Ponto que a parte contrária pode atacar. O item 7.1 (pág. 4) diz que as casas de festas 'foi considerada na análise mercadológica', e o item 10 (págs. 10–11) traz essas casas e o estado de conservação entre as 'características consideradas'. Mas o unitário adotado é a média simples, sem fator nem ajuste (item 5: 'Não foram aplicados fatores de homogeneização'). Assim o laudo declara uma consideração que não mudou o cálculo, o que contraria o K0.1 nº 7. Sugestão: dizer que essas características foram registradas como contexto e que o efeito delas fica dentro da faixa de ±10%.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 10 e 11: Dispersão alta entre os referenciais: CV de 32,9%, acima do limite de 15%. A amostra 05 (R$ 2.500,00/m²) é a que mais espalha o resultado.. Como reforçar: Ampliar a pesquisa em sites de imobiliárias antes de fechar o laudo. Apresentar a média e o CV com e sem a amostra 05, com justificativa escrita para mantê-la ou excluí-la.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 9 e 10: Referencial 05 mantido com área ambígua e imóvel de renda. O anúncio diz '80 m² (não especificado se é construída ou terreno)' e informa dois barracões já alugados. Ainda assim, ela entra como o unitário máximo.. Como reforçar: Comprovar no texto do anúncio se os 80 m² são construídos. Se não forem, ou se a exclusão for a regra, retirar a amostra e recalcular a média, o CV e o valor.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 8 e 10: Nenhuma homogeneização, apesar de áreas de 80 a 230 m² e composições diferentes. O laudo diz 'mesma tipologia' e 'composição semelhante', mas o próprio quadro contradiz isso.. Como reforçar: Justificar por escrito cada diferença de área, banheiros e vagas, ou aplicar homogeneização com aval do avaliador. Mostrar se o R$/m² varia com o tamanho da casa na amostra.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 1, 8 e 12: O valor adotado (R$ 173.000,00) fica acima do valor declarado (R$ 155.694,94), e o mínimo da faixa (R$ 155.700,00) já passa dele. O laudo serve para justificar o valor declarado.. Como reforçar: Explicar expressamente a diferença entre o valor declarado e o valor de mercado. Revisar a finalidade ou a faixa, sem alterar o resultado sem o aval do avaliador.",
+  "grave": true
+ },
+ {
+  "texto": "contestação simulada (D-083), gravidade alta — pág. 9, 12 e 13: Datas do laudo não batem. O parecer está assinado em 14/11/2026, mas a pesquisa de mercado é de 15/11/2026. A data-base é 28/10/2026, 18 dias antes da pesquisa.. Como reforçar: Corrigir a data de assinatura ou explicar a sequência real. Comprovar com captura e hora que os anúncios estavam ativos na data-base, ou justificar a estabilidade com dados.",
+  "grave": true
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador: nenhum dos 6 referenciais do item 9.1 (_revisao/pagina-09.png) tem foto principal. A coluna 'Foto Principal – Valor' mostra só o preço. Se o motivo foi bloqueio dos portais (ZAP e Deztop), fica como ressalva da amostra. Se as capturas existem, a falta é de montagem e precisa ser corrigida.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador (amostra confirmada por ele, não reprova): o CV da amostra é de cerca de 32,9% (desvio R$ 536,01 ÷ média R$ 1.627,03), acima do limite de 15% da D-068. As amostras que mais espalham o resultado são a 05 (80,00 m², R$ 2.500,00/m²) e a 03 (230,00 m², R$ 1.000,00/m²) (D-060). Os seis referenciais têm 3 quartos, contra 2 do avaliando, e o link da amostra 01 cita \"com academia\", o que pode indicar diferencial. Como o parecer vai para a malha fiscal do ITCD, esses pontos tendem a ser contestados pela administração fiscal.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): AVISO AO AVALIADOR (amostra confirmada por ele, não é reprovação): o CV da amostra é de cerca de 32,9%, acima do limite de 15% (D-068). Pela D-060, as amostras que mais espalham o resultado são: Ref. 05 (Av. Local, 80 m², R$ 2.500,00/m²), sem ela o CV cai para cerca de 24,9%; Ref. 03 (Rua Exemplo, 230 m², R$ 1.000,00/m²), sem ela o CV fica em cerca de 28,0%; sem as duas, cerca de 19,0%. A Ref. 03 tem área construída de 230 m² em lote de 360 m² e merece conferência no anúncio (possível mais de uma unidade). A Ref. 05 tem frente para avenida e área bem menor que a do avaliando. Todos os referenciais têm 3 quartos, contra 2 do avaliando. Para a malha fiscal do ITCD, este é o ponto de contestação de gravidade alta: decidir se mantém a amostra, se retira referenciais ou se reforça a justificativa no item 10.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva sobre a amostra, confirmada pelo avaliador. Não reprova o laudo, é só aviso. O CV é de cerca de 32,9%, acima do limite de 15% do Alan (D-068). As amostras que mais espalham o resultado (D-060) são a 05 (Av. Local, 80 m², R$ 2.500,00/m², com frente para avenida) e a 03 (Rua Exemplo, 230 m², R$ 1.000,00/m², área construída mais que o dobro da do avaliando). Sem as duas, ficam as amostras 01, 02, 04 e 06: média de cerca de R$ 1.565/m² e CV de cerca de 17%. Como o laudo vai para a malha fiscal do ITCD, em que a SEFAZ indica R$ 448.335,57 e a FIPE R$ 295.124,02, essa dispersão é o ponto mais fácil de atacar. A decisão de manter ou reforçar a justificativa é do avaliador.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva (aviso ao avaliador): na tabela 9.1 (pág. 9), nenhum dos seis referenciais tem foto principal; a coluna 'Foto Principal – Valor' traz só o preço. Se os portais (ZAP/Deztop) bloquearam a captura, registrar a ressalva. Se não bloquearam, as fotos precisam entrar inteiras, no padrão A1.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva (aviso ao avaliador, amostra confirmada por ele): pela média (R$ 1.627,03/m²) e pelo desvio (R$ 536,01/m²) mostrados, o CV fica em torno de 33%, acima do limite de 15% (D-068). As amostras 05 (R$ 2.500,00/m², 80 m², frente para avenida) e 03 (R$ 1.000,00/m², 230 m²) são as que mais espalham o resultado (D-060). O laudo vai para a autoridade fiscal (malha do ITCD), que pode questionar essa dispersão. Recomendo justificar a manutenção dessas amostras no texto ou rever a amostra.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, sem reprovação, porque a amostra foi confirmada por ele. O CV da amostra é de cerca de 32,9% (desvio de R$ 536,01 ÷ média de R$ 1.627,03), acima do limite de 15% (D-068). As amostras que mais espalham o resultado (D-060) são a 05 (R$ 2.500,00/m², 80 m², frente para avenida) e a 03 (R$ 1.000,00/m², 230 m²). Num laudo que vai ser analisado pela autoridade fiscal do ITCD, esse é um ponto que pode ser contestado. Avaliar se mantém essas amostras ou se reforça a justificativa da dispersão no item 10.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador: na tabela 9.1 (_revisao/pagina-09.png), nenhum dos seis referenciais tem foto principal; a coluna 'Foto Principal – Valor' mostra só o preço. Se o motivo foi bloqueio do portal (ZAP/Deztop), fica como ressalva. Vale conferir se as fotos podem vir pela extensão no Chrome do avaliador (D-064).",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador (a amostra foi confirmada por ele): com desvio de R$ 536,01/m² e média de R$ 1.627,03/m², o CV fica em cerca de 33%, acima do limite de 15% (D-068). As amostras que mais espalham o resultado são a 05 (R$ 2.500,00/m², 80 m², frente para avenida) e a 03 (R$ 1.000,00/m², 230 m²) (D-060). Também nenhum referencial tem idade aparente informada (todos 'n/i'). Os dois pontos são atacáveis na contestação de um parecer destinado ao fisco.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, sem reprovar (a amostra e o unitário foram confirmados por ele): o CV da amostra é cerca de 32,9%, acima do limite de 15% (D-068). As amostras que mais espalham o resultado são a 05 (Av. Local, R$ 2.500,00/m², 80 m², de frente para avenida) e a 03 (Rua Exemplo, R$ 1.000,00/m², 230 m²) (D-060). Como o parecer vai para a autoridade fiscal da malha do ITCD, a dispersão alta é um ponto fácil de atacar. Cabe ao avaliador decidir se mantém ou retira alguma amostra.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Tabela 9.1 (pág. 9): nenhum dos seis referenciais tem foto principal. A coluna 'Foto Principal – Valor' traz só o preço. Se a falta vem do bloqueio dos portais (ZAP/Deztop) e o avaliador já foi avisado, isto fica registrado como ressalva. Se as capturas existem em provas/anuncios/, é falha de montagem e as fotos precisam ser inseridas (padrão A1, 4,0 cm, inteiras).",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, sem reprovação, porque amostra e unitário foram confirmados por ele. O CV da amostra fica em torno de 32,9%, acima do limite de 15% da D-068. A amostra que mais espalha o resultado é a 05 (Av. Local, 80 m², R$ 2.500,00/m², com frente para avenida): sem ela, o CV cai para cerca de 24,9%. Sem as amostras 05 e 03 (230 m², R$ 1.000,00/m²), o CV cai para cerca de 19,0%. O link da amostra 01 cita 'com-academia', o que pode indicar diferencial superior. Com a finalidade de contestação na malha fiscal do ITCD, a dispersão é um ponto atacável. Vale reforçar a justificativa ou rever esses referenciais.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, sem reprovação, porque a amostra e o unitário foram confirmados por ele. O CV da amostra fica perto de 33%, acima do limite de 15% (D-068). Pela D-060, as amostras que mais espalham o resultado são a 05 (Av. Local, 80 m², R$ 2.500,00/m², frente para avenida) e a 03 (230 m², R$ 1.000,00/m²). O texto dos itens 8 e 10 diz que a faixa 'considera a dispersão', mas não apresenta o CV. Um assistente técnico da Secretaria da Economia pode atacar esse ponto. Recomenda-se registrar a decisão do avaliador ou justificar a permanência dessas duas amostras.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva ao avaliador. Páginas 9 e 10 (tabela 9.1): nenhuma das seis amostras tem foto principal; a coluna 'Foto Principal – Valor' mostra só o preço. Se o portal bloqueou as imagens, registrar como aviso. Caso contrário, fica fora do padrão A1 (foto de 4,0 cm inteira).",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, não é reprovação, porque a amostra foi confirmada por ele. O CV da amostra fica em cerca de 33%, acima do limite de 15% (D-068). Pela D-060, a amostra que mais espalha o resultado é a 05 (Av. Local, 80,00 m², R$ 2.500,00/m²). As amostras 03 (230,00 m², R$ 1.000,00/m², com mais que o dobro da área do avaliando) e 01 também pesam. A decisão de manter ou tirar alguma delas é do avaliador. Se mantiver todas, o laudo deve justificar o CV acima de 15%.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva sobre a amostra (aviso ao avaliador, não reprovação). Na tabela do item 9.1 (_revisao/pagina-09.png e _revisao/pagina-10.png), a coluna 'Foto Principal – Valor' traz só o preço. Nenhum dos 6 referenciais tem foto do anúncio, nem os 2 do ZAP Imóveis. Também falta o carimbo 'Acessado em dd/mm/aaaa às hh:mm' exigido pela D-082. Se os portais bloquearam os anúncios, isso precisa constar como ressalva. Se não bloquearam, as fotos devem ser capturadas antes da entrega.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador (amostra confirmada por ele). Pelos unitários do item 9.1, o CV é de cerca de 33% (desvio de cerca de R$ 536/m²), mais que o dobro do limite de 15% (D-068). Pela D-060, a amostra que mais espalha o resultado é a 05 (R$ 2.500,00/m²); em seguida vem a 03 (R$ 1.000,00/m²). A decisão de manter as amostras é do avaliador. Se mantiver, o CV deve aparecer no laudo com a justificativa.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador. Os itens 5 e 10 dizem que os referenciais têm 'composição assemelhada', mas todos têm 3 quartos e o avaliando tem 2 (1 suíte), com áreas construídas de 80 a 230 m² contra 106,24 m². Além disso, os seis referenciais têm a mesma idade estimada (30 anos), igual à do avaliando, que também não tem fonte. A parte contrária (SEFAZ) pode atacar essa justificativa de não homogeneizar. Convém reforçar o texto ou confirmar a idade estimada de cada anúncio.",
+  "grave": false
+ },
+ {
+  "texto": "pesquisa: anúncio nº 2: área do cartão (110,00 m²) diferente da construída no texto do anúncio (290,00 m²): o R$/m² usa a do texto",
+  "grave": false
+ },
+ {
+  "texto": "pesquisa: anúncio nº 3: área do cartão (230,00 m²) diferente da construída no texto do anúncio (139,00 m²): o R$/m² usa a do texto",
+  "grave": false
+ },
+ {
+  "texto": "pesquisa: anúncio nº 5: área do cartão (80,00 m²) diferente da construída no texto do anúncio (300,00 m²): o R$/m² usa a do texto",
+  "grave": false
+ },
+ {
+  "texto": "pesquisa: anúncio nº 6: área do cartão (110,00 m²) diferente da construída no texto do anúncio (170,00 m²): o R$/m² usa a do texto",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Referencial 02 (anúncio), pág. 9: a tabela traz terreno de 30,00 m² e área construída de 290,00 m². A descrição do próprio anúncio diz '110 m², 3 dormitórios' e 'lote escorrido'. As duas áreas parecem trocadas ou erradas. O R$ 548,28/m² foi calculado sobre 290 m². Com 110 m² seria R$ 1.445,45/m². Isso muda o mínimo, a média (R$ 1.174,11/m²) e a mediana. Conferir as áreas no anúncio e corrigir. Se o dado não puder ser confirmado, o anúncio é contraditório e deve sair da amostra (D-021).",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Referencial 06 (anúncio), pág. 10: a tabela traz área construída de 170,00 m². A descrição diz 'Casa de 110 m² construídos em lote de 10x30 (300 m²)'. Com 110 m² o unitário seria R$ 1.818,18/m², e não R$ 1.176,47/m². É um anúncio com dado contraditório, ou um erro de extração. Corrigir ou justificar.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Referencial 05 (anúncio), pág. 9: o anúncio informa '80m² de área (não especificado se é construída ou terreno)'. A tabela usa 300,00 m² como área construída, número que não aparece no anúncio e parece ser o lote. O texto também cita 'Dois barracões nos fundos já alugados', ou seja, imóvel de renda com várias unidades. Pelo P6 (camada B), esse tipo de amostra sai ou exige justificativa. A área é contraditória e o tipo de imóvel é diferente do avaliando. Fica como aviso ao avaliador: excluir ou justificar no laudo.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1, referencial 02 (anúncio): a descrição do anúncio diz 110 m², mas a tabela registra terreno de 30,00 m² e área construída de 290,00 m². Os dois números são incoerentes com o texto (terreno de 30 m² não é plausível) e parecem trocados ou errados. O R$ 548,28/m² foi calculado sobre os 290 m², o que derruba o mínimo e a média. É preciso conferir as áreas no anúncio. Ressalva ao avaliador, que confirmou a amostra.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1, referencial 06 (anúncio): a descrição diz '110 m² construídos em lote de 10x30 (300 m²)', mas a tabela registra 170,00 m² de área construída, e o R$ 1.176,47/m² usa esses 170 m². Com 110 m², o unitário seria R$ 1.818,18/m². Divergência entre a tabela e o texto do próprio anúncio. Ressalva ao avaliador.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1, referencial 05 (anúncio): o anúncio diz '80 m² de área (não especificado se é construída ou terreno)', mas a tabela registra 300,00 m² de área construída (provavelmente o terreno), e o R$ 666,67/m² usa esse número. O anúncio também cita 'dois barracões nos fundos já alugados', ou seja, imóvel de renda com várias unidades, que a regra exclui (P9/D-010). Além disso, o item 9 afirma que todos os 6 anúncios tinham área construída informada, o que este anúncio contradiz. Ressalva ao avaliador.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1, referencial 04: a própria tabela registra 'dados divergentes sobre suítes' (anúncio contraditório). A regra P6/P9 exclui anúncio contraditório ou exige justificativa expressa no laudo, e não há justificativa. Ressalva ao avaliador.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Item 9.1: a coluna 'Idade Aparente' traz '30 anos (estimada)' para os 6 referenciais, sem fonte (anúncio ou vistoria). É um dado sem origem (K0.1, princípio 1). O correto é 'n/i' ou indicar a fonte.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador (amostra confirmada por ele): os unitários vão de R$ 1.000,00 a R$ 2.500,00/m², com CV de cerca de 33%, acima do limite de 15% (D-068). As amostras que mais espalham o resultado são a 05 (R$ 2.500,00/m²) e a 03 (R$ 1.000,00/m²) (D-060). A amostra 05 também tem área de 80 m² sem indicação de que seja construída e tem 'dois barracões nos fundos já alugados', o que se enquadra no critério de exclusão 'renda com várias unidades'. A amostra 03 tem 230 m² construídos, mais que o dobro do avaliando. A amostra 04 tem como foto principal um banner do anúncio, não a fachada. Como o laudo é para a malha fiscal do ITCD, esses pontos são os mais atacáveis pela Secretaria da Economia.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador, não é reprovação. Os itens 7.1, 8 e 10 dizem que as casas de festas e o estado de conservação 'foram considerados na análise'. Porém o unitário adotado é a média simples, sem nenhum ajuste. A afirmação pode ser lida como um ato que não aparece no cálculo (K0.1, princípio 7). Sugiro escrever que essas características foram observadas e que a média já reflete o mercado raso, ou ajustar o texto como o avaliador preferir.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): AVISO AO AVALIADOR (o referencial foi mantido por decisão dele): no referencial 05, o próprio anúncio diz \"80m² de área (não especificado se é construída ou terreno)\". Mesmo assim, os 80 m² foram usados como área construída. É o maior unitário da amostra (R$ 2.500,00/m²). O anúncio também cita dois barracões nos fundos já alugados (renda com várias unidades). Numa contestação, a parte contrária pode atacar esse ponto. Sugestão de reforço: dizer no item 9 que a área foi tratada como construída por premissa do avaliador.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Aviso ao avaliador (amostra confirmada, não reprova). O referencial 05 tem área de 80 m² que o próprio anúncio diz não saber se é construída ou de terreno, e informa dois barracões alugados nos fundos (renda com várias unidades). Mesmo assim é o maior unitário (R$ 2.500,00/m²). O referencial 03 tem 230 m² construídos, mais que o dobro do avaliando, e é o menor unitário (R$ 1.000,00/m²). Os dois puxam os extremos e são os pontos mais expostos a contestação perante a SEFAZ-GO.",
+  "grave": false
+ },
+ {
+  "texto": "selecao: revisor (ressalva, decisão do avaliador): Ressalva para o avaliador decidir, não reprova. Os itens 7.1 e 10 dizem que as casas de festas e o estado de conservação foram 'considerados na análise mercadológica'. Porém o unitário adotado é a média simples, sem nenhum ajuste (item 5: 'Não foram aplicados fatores de homogeneização'). A parte contrária pode alegar que essa consideração não aparece no resultado. O avaliador pode trocar por uma frase que só registre a característica observada ou explicar como ela entrou no unitário.",
+  "grave": false
+ },
+ {
+  "texto": "redacao: seções sem texto: 7.4 (descricao): fato do exemplo copiado (não consta dos dados deste imóvel; remova): \"30 anos\"; 10 (determinacao): fato do exemplo copiado (não consta dos dados deste imóvel; remova): \"30 anos\"",
+  "grave": true
+ },
+ {
+  "texto": "montagem: Confira a capa: o contorno vermelho acompanha o imóvel",
+  "grave": false
+ },
+ {
+  "texto": "montagem: parágrafo repetido descartado: - Manchas de umidade na base das paredes de um quarto.",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): Uma linha da tabela do Resumo (item 12, pág. 13) saiu quebrada. Na célula 'Estado de conservação' ficou 'Entre regular e necessitando de reparos simples. Pontos observados na vistoria: – idade aparente Cerca de 30 anos'. A lista de pontos observados se perdeu e a linha 'Idade aparente' foi absorvida pela célula anterior. Corrigir: deixar 'Estado de conservação' = 'Entre regular e necessitando de reparos simples' e criar uma linha própria 'Idade aparente' = 'Cerca de 30 anos'.",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): Duas listas saíram mal formatadas. (1) No item 10 (págs. 10–11), as características consideradas estão corridas no parágrafo, com hífens no meio do texto ('foram: - casa térrea…; - idade aparente…; - estado…'), em vez de uma lista. (2) No item 7.4 (pág. 6), os pontos observados do 'Estado de conservação' aparecem com o mesmo marcador e no mesmo nível dos campos principais (Tipo, Cobertura etc.), em vez de recuados abaixo dele. Corrigir: listas com marcadores e recuo corretos.",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): Ressalva sobre o referencial 05 (Av. Local), mantido por decisão do avaliador; fica como aviso, não reprovação. A tabela 9.1 (pág. 10) transcreve o anúncio: '80m² de área (não especificado se é construída ou terreno)' e 'Dois barracões nos fundos já alugados'. Já o item 9 (pág. 9) diz que o referencial foi mantido por 'a área construída e o padrão anunciados serem compatíveis'. O laudo afirma que a área é construída, enquanto o próprio anúncio diz que isso não foi informado. Esse referencial dá o maior unitário (R$ 2.500,00/m²) e puxa a média para cima. Sugestão: reescrever a justificativa sem afirmar que se trata de área construída, ou registrar expressamente a incerteza.",
+  "grave": false
+ },
+ {
+  "texto": "revisao: revisor (contra decisão do avaliador, ignorado): A célula 'Estado de conservação' do Resumo (item 12, pág. 13) ficou cortada. Ela termina em 'Pontos observados na vistoria:' sem listar os pontos, e logo em seguida aparece '– idade aparente' colado na linha seguinte. Basta deixar 'Entre regular e necessitando de reparos simples' (ou um resumo curto dos pontos) e separar a linha 'Idade aparente'.",
+  "grave": false
+ }
+]

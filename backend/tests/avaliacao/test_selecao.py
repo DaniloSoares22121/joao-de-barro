@@ -5,8 +5,8 @@ from decimal import Decimal
 from pathlib import Path
 
 from lovable.avaliacao import db, fonte_mercado, ia
-from lovable.avaliacao.agentes import pesquisa, selecao
-from lovable.avaliacao.modelos import Campo, Trabalho
+from lovable.avaliacao.agentes import selecao
+from lovable.avaliacao.modelos import Campo, Referencial, Trabalho
 from tests.avaliacao.conftest import numero_livre
 
 FIX = Path(__file__).parent / "fixtures" / "ov120.json"
@@ -29,17 +29,33 @@ def _ref(n, link, tip="Sobrado", area=200.0, preco=600000.0, bairro="Jardim Vila
             "idade_aparente": "Antiga", "descricao": desc}
 
 
+_SEMENTE: list[dict] = []
+
+
 def _fonte(tmp_path, refs) -> None:
-    p = tmp_path / "mercado.json"
-    p.write_text(json.dumps(refs, ensure_ascii=False), encoding="utf-8")
-    fonte_mercado.registrar(fonte_mercado.FonteFixture(p))
+    """112: a busca automática saiu; os anúncios do teste são semeados direto na lista do trabalho."""
+    _SEMENTE[:] = refs
+    fonte_mercado.registrar(fonte_mercado.FonteFixture())
+
+
+def _semear(jid: str) -> list[Referencial]:
+    from lovable.avaliacao.agentes.pesquisa import link_limpo
+    vistos, refs = set(), []
+    for d in _SEMENTE:                                   # o mesmo anúncio duas vezes (link ou preço+área+bairro) entra uma vez
+        r = Referencial.model_validate({**d, "n": 0})
+        chaves = {link_limpo(r.link)} | ({(r.preco, r.area_m2, r.bairro.casefold())} if r.preco and r.area_m2 else set())
+        if chaves & vistos:
+            continue
+        vistos |= chaves
+        refs.append(r.model_copy(update={"n": len(refs) + 1}))
+    db.salvar_candidatos(jid, refs, substituir=True)
+    db.evento(jid, "pesquisa", "resultado", f"{len(refs)} candidatos",
+              dados={"consultas": [], "candidatos": [r.model_dump(mode="json") for r in refs]})
+    return refs
 
 
 def _mock(monkeypatch, escolher, unitario=None, motivo=lambda c: "menos_similar", faixa=None):
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
-        if esquema is pesquisa._Consultas:
-            return esquema.model_validate({"consultas": [
-                {"tipologia": "Sobrado", "bairro": "Jardim Vila Boa", "cidade": "Goiânia"}]})
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         cands = db.candidatos(jid_box[0])
         return esquema.model_validate({
             "decisoes": [{"n": c.n, "escolhido": escolher(c),
@@ -67,7 +83,7 @@ def test_selecao_ov120(monkeypatch, tmp_path):
     box = _mock(monkeypatch, lambda c: c.link in links_p8)
     jid = _job()
     box.append(jid)
-    cands = asyncio.run(pesquisa.rodar(jid))
+    cands = _semear(jid)
     assert len(cands) == 8
     s = asyncio.run(selecao.rodar(jid))
     esc = [r for r in s.refs if r.escolhido]
@@ -75,22 +91,6 @@ def test_selecao_ov120(monkeypatch, tmp_path):
     assert all(r.justificativa for r in s.refs)
     assert s.declaracao_amostra == ""
     assert db.resultado(jid, "selecao") is not None
-
-
-def test_dedup_link_utm(monkeypatch, tmp_path):
-    _fonte(tmp_path, [_ref(0, "https://x.com/a"), _ref(0, "https://x.com/a?utm_source=x", preco=1)])
-    box = _mock(monkeypatch, lambda c: True)
-    jid = _job()
-    box.append(jid)
-    assert len(asyncio.run(pesquisa.rodar(jid))) == 1
-
-
-def test_dedup_preco_area_bairro(monkeypatch, tmp_path):
-    _fonte(tmp_path, [_ref(0, "https://x.com/a"), _ref(0, "https://y.com/b")])
-    box = _mock(monkeypatch, lambda c: True)
-    jid = _job()
-    box.append(jid)
-    assert len(asyncio.run(pesquisa.rodar(jid))) == 1
 
 
 def test_completa_ate_cinco(monkeypatch, tmp_path):
@@ -103,7 +103,7 @@ def test_completa_ate_cinco(monkeypatch, tmp_path):
     box = _mock(monkeypatch, lambda c: c.link.endswith(("/0", "/1", "/2")))
     jid = _job(area=210.0)
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     esc = {r.link.rsplit("/", 1)[1] for r in s.refs if r.escolhido}
     # 3 perde por bairro (pontuação); entre 4,5,6 desempata por |unitário − mediana|
@@ -125,7 +125,7 @@ def test_completa_nunca_com_excluidos_por_regra(monkeypatch, tmp_path):
                 motivo=lambda c: "regra" if c.link.endswith(regra) else "menos_similar")
     jid = _job(area=210.0)
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     esc = {r.link.rsplit("/", 1)[1] for r in s.refs if r.escolhido}
     assert esc == {"0", "1", "2", "m1", "m2"}
@@ -141,7 +141,7 @@ def test_completa_nao_usa_outra_tipologia_e_declara_reduzida(monkeypatch, tmp_pa
                 motivo=lambda c: "regra" if c.link.endswith("piscina") else "menos_similar")
     jid = _job(area=210.0)
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     esc = {r.link.rsplit("/", 1)[1] for r in s.refs if r.escolhido}
     assert esc == {"0", "1", "2", "m1"}
@@ -160,7 +160,7 @@ def test_area_br_e_ausente(monkeypatch, tmp_path):
         bairro="Jardim Vila Boa", cidade="Goiânia", pin_maps="", data_base=date(2026, 10, 20),
         data_vistoria=date(2026, 10, 18)))
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     assert s.unitario_adotado is None
     assert _avisos(jid, "área construída do avaliando ausente")
@@ -174,15 +174,22 @@ def _avisos(jid, trecho):
 
 
 def test_faixa_pct(monkeypatch, tmp_path):
+    # ORDEM 002 (decisão do Alan, faixa padrão ±10%): a faixa da IA vira só PROPOSTA; o laudo
+    # usa ±10% até o avaliador confirmar outra na tela. A proposta diferente fica registrada
+    # (evento "info"), sem aviso. Antes: a IA definia a faixa (15 → 15).
     _fonte(tmp_path, [_ref(0, f"https://x.com/{i}", area=200 + i, preco=600000 + i * 7000) for i in range(5)])
-    for faixa, esperado, aviso in ((15, "15", False), (0, "10", True), (45, "10", True)):
+    for faixa, proposta in ((15, True), (0, True), (45, True), (10, False)):
         box = _mock(monkeypatch, lambda c: True, faixa=faixa)
         jid = _job()
         box.append(jid)
-        asyncio.run(pesquisa.rodar(jid))
+        _semear(jid)
         s = asyncio.run(selecao.rodar(jid))
-        assert s.faixa_pct == Decimal(esperado)
-        assert bool(_avisos(jid, "faixa_pct")) is aviso
+        assert s.faixa_pct == Decimal("10") and not s.confirmado
+        with db._conn() as c:
+            infos = [r["msg"] for r in c.execute(
+                "SELECT msg FROM av_events WHERE job=? AND etapa='selecao' AND nivel='info'", (jid,))]
+        assert any("IA propôs faixa" in m for m in infos) is proposta
+        assert not _avisos(jid, "faixa")
 
 
 def test_unitario_fora_do_intervalo_vira_none(monkeypatch, tmp_path):
@@ -190,7 +197,7 @@ def test_unitario_fora_do_intervalo_vira_none(monkeypatch, tmp_path):
     box = _mock(monkeypatch, lambda c: True, unitario=99999)
     jid = _job()
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     assert s.unitario_adotado is None
 
@@ -236,7 +243,7 @@ def test_fora_da_curva_excluido_antes_da_ia_e_nao_volta(monkeypatch, tmp_path):
     monkeypatch.setattr(ia, "perguntar", espia)
     jid = _job()
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     s = asyncio.run(selecao.rodar(jid))
     caro = next(r for r in s.refs if r.preco == 2000000)
     assert not caro.escolhido and selecao.FORA_DA_CURVA in caro.justificativa
@@ -260,7 +267,7 @@ def test_completar_prefere_anuncio_recente(monkeypatch, tmp_path):
     box = _mock(monkeypatch, lambda c: c.link.endswith(("e2", "e3", "e4", "e5")))
     jid = _job()
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _semear(jid)
     refs_ = [r for r in asyncio.run(selecao.rodar(jid)).refs if r.escolhido]
     assert len(refs_) == 5 and {r.link for r in refs_} >= {"https://x.com/e1"}
     assert "https://x.com/e0" not in {r.link for r in refs_}

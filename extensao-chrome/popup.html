@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Enviar ao JdB</title>
+  <style>
+    body { font: 13px/1.4 system-ui, Segoe UI, Arial, sans-serif; width: 340px; margin: 0; color: #292524; }
+    header { background: #a0522d; color: #fff; padding: 10px 12px; font-weight: 600; }
+    main { padding: 10px 12px 12px; }
+    label { display: block; font-size: 12px; color: #57534e; margin-top: 8px; }
+    input, select { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #d6d3d1; border-radius: 6px; font: inherit; }
+    .linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
+    button { margin-top: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #a0522d; color: #fff; font-weight: 600; cursor: pointer; }
+    button.sec { background: #f5f5f4; color: #44403c; border: 1px solid #d6d3d1; }
+    button:disabled { opacity: .6; cursor: default; }
+    .titulo { font-weight: 600; margin: 4px 0; }
+    .msg { margin-top: 8px; padding: 6px 8px; border-radius: 6px; font-size: 12px; }
+    .ok { background: #ecfdf5; color: #065f46; } .erro { background: #fef2f2; color: #991b1b; }
+    .nota { font-size: 11px; color: #78716c; margin-top: 6px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>Enviar ao JdB</header>
+  <main>
+    <!-- 077-D: sem senha. A extensão se liga sozinha ao JdB aberto neste Chrome. -->
+    <section id="entrar" hidden>
+      <div class="titulo">Abra o JdB neste Chrome</div>
+      <p class="nota" style="font-size:12px;color:#44403c">A extensão se liga sozinha ao JdB que já está aberto neste
+      Chrome. Não precisa de senha.</p>
+      <button id="btn-abrir">Abrir o JdB</button>
+      <details style="margin-top:12px">
+        <summary class="nota" style="cursor:pointer">Outra forma de entrar</summary>
+        <label for="servidor">Endereço do sistema</label>
+        <input id="servidor" placeholder="https://joaodebarro.brixly.com.br">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="username">
+        <label for="senha">Senha</label>
+        <input id="senha" type="password" autocomplete="current-password">
+        <button id="btn-entrar" class="sec">Entrar</button>
+      </details>
+    </section>
+
+    <section id="enviar" hidden>
+      <div id="conectado" class="msg ok" style="margin:0 0 8px">Conectado ao JdB ✓</div>
+      <div class="titulo" id="titulo">Lendo a página…</div>
+      <div class="linha">
+        <div><label for="preco">Preço (R$)</label><input id="preco" inputmode="decimal"></div>
+        <div><label for="area">Área (m²)</label><input id="area" inputmode="decimal"></div>
+      </div>
+      <div class="linha">
+        <div><label for="quartos">Quartos</label><input id="quartos" inputmode="numeric"></div>
+        <div><label for="unit">R$/m²</label><input id="unit" disabled></div>
+      </div>
+      <label for="trabalho">Trabalho</label>
+      <select id="trabalho"></select>
+      <button id="btn-enviar" disabled>Enviar este anúncio</button>
+      <button id="btn-pagina" class="sec" disabled title="Na página de RESULTADOS de busca do portal: manda todos os anúncios da página para a lista de candidatos">Enviar resultados desta página</button>
+      <p class="nota">Envia este anúncio com a foto principal (a maior imagem na tela) e os dados. Se ele já está na lista do trabalho, completa o mesmo referencial; senão, entra como escolhido (“enviado pelo avaliador”). Deixe a foto principal visível e confira preço e área antes de enviar.</p>
+      <div id="portais" class="nota" hidden>
+        <p><b>Botão na página do anúncio e prova do acesso:</b> permita uma vez e o botão “Enviar ao JdB” aparece no
+        canto das páginas de anúncio; junto com a foto, vai a captura da página com data, hora e link (a prova do
+        acesso). O Chrome vai dizer “ler e alterar dados em todos os sites”: o JdB só lê a página quando você toca no botão.</p>
+        <button id="btn-portais" class="sec">Permitir o JdB nos portais de imóveis</button>
+      </div>
+      <p id="fixar" class="nota" hidden>Para achar este botão sempre: toque na peça de quebra-cabeça 🧩, no alto à direita do Chrome, e fixe o “Enviar ao JdB”.</p>
+    </section>
+    <div id="msg" class="msg" hidden></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

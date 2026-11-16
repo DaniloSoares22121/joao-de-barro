@@ -25,20 +25,32 @@ UF_PADRAO = "go"
 # tipologia (slug) -> termo de cada portal
 _TIPOS = {
     "zap": {"casa": "casas", "apartamento": "apartamentos", "terreno": "terrenos-lotes-condominios",
-            "sobrado": "sobrados", "_": "imoveis"},
+            "sobrado": "sobrados", "galpao": "galpao-deposito-armazem", "_": "imoveis"},
     "vivareal": {"casa": "casa_residencial", "apartamento": "apartamento_residencial",
-                 "terreno": "lote-terreno_residencial", "sobrado": "sobrado_residencial", "_": ""},
+                 "terreno": "lote-terreno_residencial", "sobrado": "sobrado_residencial",
+                 "galpao": "galpao_comercial", "_": ""},
+    # OLX: galpão não tem categoria própria na URL; vai como texto na busca (ver _olx)
     "olx": {"casa": "casas", "apartamento": "apartamentos", "terreno": "terrenos",
-            "sobrado": "casas", "_": ""},
+            "sobrado": "casas", "galpao": "", "_": ""},
     "imovelweb": {"casa": "casas", "apartamento": "apartamentos", "terreno": "terrenos",
-                  "sobrado": "casas", "_": "imoveis"},
+                  "sobrado": "casas", "galpao": "comerciais-galpao-deposito-barracao", "_": "imoveis"},
 }
+
+# Galpão: URLs conferidas ao vivo no Chrome do Alan em 2026-11-12 (Polo Empresarial Goiás,
+# Aparecida de Goiânia): ZAP /venda/galpao-deposito-armazem/, Viva Real .../galpao_comercial/,
+# Imovelweb comerciais-galpao-deposito-barracao-venda-..., OLX só por texto ("galpao ...").
 
 
 def _tipo(portal: str, tipologia: str) -> str:
     t = slug(tipologia).split("-")[0] if tipologia else ""
+    if t == "barracao":
+        t = "galpao"
     m = _TIPOS[portal]
     return m.get(t, m["_"])
+
+
+def _eh_galpao(tipologia: str) -> bool:
+    return (slug(tipologia).split("-")[0] if tipologia else "") in ("galpao", "barracao")
 
 
 @dataclass(frozen=True)
@@ -72,26 +84,37 @@ def _zap_bairro(bairro: str) -> str:
 
 
 def _zap(c: Consulta) -> str:
-    return (f"https://www.zapimoveis.com.br/venda/{_tipo('zap', c.tipologia)}/"
-            f"{UF_PADRAO}+{slug(c.cidade)}++{_zap_bairro(c.bairro)}/")
+    # sem bairro = a cidade inteira ("go+aparecida-de-goiania/", conferido em 2026-11-12)
+    local = f"{UF_PADRAO}+{slug(c.cidade)}" + (f"++{_zap_bairro(c.bairro)}" if slug(c.bairro) else "")
+    return f"https://www.zapimoveis.com.br/venda/{_tipo('zap', c.tipologia)}/{local}/"
 
 
 def _vivareal(c: Consulta) -> str:
     tipo = _tipo("vivareal", c.tipologia)
-    u = (f"https://www.vivareal.com.br/venda/{slug('goias')}/{slug(c.cidade)}/"
-         f"bairros/{slug(c.bairro)}/")
+    u = f"https://www.vivareal.com.br/venda/{slug('goias')}/{slug(c.cidade)}/"
+    if slug(c.bairro):
+        u += f"bairros/{slug(c.bairro)}/"
     return u + (f"{tipo}/" if tipo else "")
 
 
 def _olx(c: Consulta) -> str:
     tipo = _tipo("olx", c.tipologia)
     u = f"https://www.olx.com.br/imoveis/venda/{tipo + '/' if tipo else ''}estado-{UF_PADRAO}"
-    return u + f"?q={slug(c.bairro).replace('-', '+')}+{slug(c.cidade).replace('-', '+')}"
+    termos = (["galpao"] if _eh_galpao(c.tipologia) else []) + [slug(c.bairro), slug(c.cidade)]
+    return u + "?q=" + "+".join(t.replace("-", "+") for t in termos if t)
+
+
+# Imovelweb: cidade que não é capital precisa da UF no caminho (sem ela o portal devolve a busca
+# nacional — visto em "aparecida-de-goiania", ORDEM 010)
+_IMOVELWEB_CIDADE = {"aparecida-de-goiania": "aparecida-de-goiania-go",
+                     "senador-canedo": "senador-canedo-go", "trindade": "trindade-go"}
 
 
 def _imovelweb(c: Consulta) -> str:
-    return (f"https://www.imovelweb.com.br/{_tipo('imovelweb', c.tipologia)}-venda-"
-            f"{slug(c.bairro)}-{slug(c.cidade)}.html")
+    # ORDEM 010: sem bairro (busca pela cidade inteira) o caminho é "<tipo>-venda-<cidade>"
+    cid = _IMOVELWEB_CIDADE.get(slug(c.cidade), slug(c.cidade))
+    local = "-".join(x for x in (slug(c.bairro), cid) if x)
+    return f"https://www.imovelweb.com.br/{_tipo('imovelweb', c.tipologia)}-venda-{local}.html"
 
 
 PORTAIS: dict[str, Portal] = {

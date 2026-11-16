@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from .. import calculo, conhecimento, db, ia
 from ..modelos import Referencial
 from . import _comum
+from ..plural import pl
 
 MIN_ESCOLHIDOS = 5
 
@@ -45,12 +46,63 @@ class _RespostaIA(BaseModel):
     faixa_pct: Decimal | None = None
 
 
+class PropostaIA(BaseModel):
+    """O que a IA propôs (guardado para o avaliador comparar ao confirmar)."""
+    unitario_adotado: Decimal | None = None
+    justificativa_unitario: str = ""
+    faixa_pct: Decimal | None = None
+
+
 class Selecao(BaseModel):
     refs: list[Referencial]
     unitario_adotado: Decimal | None = None
     justificativa_unitario: str = ""
     faixa_pct: Decimal = Decimal("10")
     declaracao_amostra: str = ""
+    # True quando o avaliador confirmou (ou trocou) unitário e faixa na tela; a redação só
+    # começa depois disso (orquestrador pausa em AGUARDANDO_AVALIADOR)
+    confirmado: bool = False
+    proposta_ia: PropostaIA | None = None
+    # 082-4: a amostra (nº, preço, áreas, usar) no momento em que o AVALIADOR fixou o unitário
+    amostra: str = ""
+
+
+ESCOLHA_MANUAL = "escolha manual do avaliador"
+AMOSTRA_MUDOU = "A amostra mudou depois que você fixou o unitário"
+
+
+def assinatura_amostra(refs) -> str:
+    """Retrato da amostra usada no cálculo: mudou um preço, uma área ou quem entra → muda."""
+    return "|".join(f"{r.n}:{r.preco}:{r.area_m2}:{r.lote_m2}" for r in sorted(
+        (r for r in refs if r.escolhido), key=lambda r: r.n))
+
+
+def unitario_valido(sel: "Selecao") -> tuple[Decimal | None, str]:
+    """082-4 (trava de valor): (unitário a usar, problema). O padrão é a MÉDIA (None). Unitário fixo só com
+    decisão escrita do avaliador (justificativa dele) e para a MESMA amostra; se a amostra mudou, volta a
+    média e o problema é devolvido (o laudo para e pergunta)."""
+    u = sel.unitario_adotado
+    if u is None:
+        return None, ""
+    just = (sel.justificativa_unitario or "").strip()
+    escrita = just.removeprefix(ESCOLHA_MANUAL).strip(" :")
+    if not escrita or not sel.amostra:
+        return None, ""                       # sem decisão escrita do avaliador: vale a média
+    if sel.amostra != assinatura_amostra(sel.refs):
+        return None, AMOSTRA_MUDOU
+    return u, ""
+
+
+FAIXA_PADRAO = Decimal("10")
+MANUAL = "manual"   # Referencial.fonte_coleta dos referenciais cadastrados pelo avaliador
+
+
+def eh_area_construida(nome: str) -> bool:
+    """Nome de campo que é a área construída do avaliando. O IPTU de Goiânia escreve "Área
+    edificada"; a matrícula/habite-se, "área construída". Exclui terreno/lote/privativa."""
+    n = _n(nome)
+    return ("area" in n and ("constru" in n or "edificad" in n)
+            and not any(x in n for x in ("terreno", "lote", "sublote")))
 
 
 def _n(s) -> str:
@@ -62,9 +114,23 @@ def _areas_construidas(job_id: str) -> list[tuple[Decimal, str, str]]:
     """(valor, origem, nome) de cada campo de área construída válido, documento primeiro:
     a medida da matrícula/IPTU vale mais que a estimada na vistoria."""
     out = []
+    t = _comum.trabalho(job_id)
+    if classe_tipologia(t.tipo) == "apartamento":
+        # apartamento: a unidade de comparação é a ÁREA PRIVATIVA (escritura/IPTU), não a
+        # "área total construída" (que soma área comum)
+        for c in db.campos(job_id):
+            if "privativ" in _n(c.nome) and "area" in _n(c.nome) and c.origem in ("documento", "vistoria"):
+                try:
+                    v = _decimal_br(c.valor)
+                except (InvalidOperation, ValueError):
+                    continue
+                if v.is_finite() and v > 0:
+                    out.append((v, c.origem, c.nome))
+        if out:
+            out.sort(key=lambda x: x[1] != "documento")
+            return out
     for c in db.campos(job_id):
-        nome = _n(c.nome)
-        if "area" in nome and "constru" in nome and c.origem in ("documento", "vistoria"):
+        if eh_area_construida(c.nome) and c.origem in ("documento", "vistoria"):
             try:
                 v = _decimal_br(c.valor)
             except (InvalidOperation, ValueError):
@@ -75,9 +141,131 @@ def _areas_construidas(job_id: str) -> list[tuple[Decimal, str, str]]:
     return out
 
 
+# ------------------------------------------------------------ ORDEM 021: base e área do cálculo
+# O avaliador escolhe SEMPRE a base ("construida" ou "terreno") e qual área (pode haver mais de
+# um valor: IPTU do lote inteiro × galpão medido por satélite). A escolha fica por trabalho em
+# av_settings e sobrevive a reextração e às voltas do revisor.
+BASES = ("construida", "terreno")
+ROTULO_BASE = {"construida": "área construída", "terreno": "área do terreno"}
+_NAO_SUGERIR = ("cadastrad", "iptu", "total", "matricula")
+FALTA_ESCOLHA = "escolha a base do cálculo e a área do imóvel"
+SEM_VALOR = "escolha a base do cálculo e a área para ver o valor"
+
+
+def eh_area_terreno(nome: str) -> bool:
+    n = _n(nome)
+    return "area" in n and ("terreno" in n or "lote" in n)
+
+
+def _parte(job_id: str) -> str:
+    """ORDEM 032-2: parte do imóvel que é o objeto da avaliação ("" = imóvel inteiro)."""
+    try:
+        return (_comum.trabalho(job_id).objeto_parte or "").strip()
+    except Exception:
+        return ""
+
+
+def _opcoes(job_id: str, casa) -> list[dict]:
+    """Campos de área (documento, vistoria ou inferido) com valor válido; valor repetido
+    aparece uma vez (documento primeiro). A sugerida é a do imóvel avaliado: a 1ª que NÃO é
+    cadastral/IPTU/total/matrícula; senão, a de documento."""
+    cs = [c for c in db.campos(job_id) if casa(c.nome) and c.origem in ("documento", "vistoria", "inferido")]
+    cs.sort(key=lambda c: {"documento": 0, "vistoria": 1, "inferido": 2}[c.origem])
+    out, vistos = [], set()
+    for c in cs:
+        try:
+            v = _decimal_br(c.valor)
+        except (InvalidOperation, ValueError):
+            continue
+        if not v.is_finite() or v <= 0:
+            continue
+        chave = v.quantize(Decimal("0.01"))
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        out.append({"campo": c.nome, "valor": float(chave), "origem": c.origem,
+                    "fonte": c.fonte or "", "sugerida": False})
+    parte = _n(_parte(job_id))
+    sug = ((next((o for o in out if parte in _n(o["campo"])), None) if parte else None)
+           or next((o for o in out if not any(x in _n(o["campo"]) for x in _NAO_SUGERIR)), None)
+           or next((o for o in out if o["origem"] == "documento"), None)
+           or (out[0] if out else None))
+    if sug:
+        sug["sugerida"] = True
+    return out
+
+
+def opcoes_area(job_id: str) -> dict:
+    """{construida: [...], terreno: [...], escolha} para a tela "Confirmar valor"."""
+    t = _comum.trabalho(job_id)
+    constr = []
+    if classe_tipologia(t.tipo) == "apartamento":
+        constr = _opcoes(job_id, lambda n: "privativ" in _n(n) and "area" in _n(n))
+    constr = constr or _opcoes(job_id, eh_area_construida)
+    return {"construida": constr, "terreno": _opcoes(job_id, eh_area_terreno),
+            "escolha": escolha_area(job_id)}
+
+
+def _chave_escolha(job_id: str) -> str:
+    return f"area_escolha:{job_id}"
+
+
+def escolha_area(job_id: str) -> dict | None:
+    import json
+    bruto = db.setting(_chave_escolha(job_id))
+    try:
+        d = json.loads(bruto) if bruto else None
+    except ValueError:
+        return None
+    return d if isinstance(d, dict) and d.get("base") in BASES and d.get("campo") else None
+
+
+def gravar_escolha_area(job_id: str, base: str, campo: str) -> dict:
+    """Valida (base conhecida, campo entre as opções dessa base) e grava. ValueError se não."""
+    import json
+    if base not in BASES:
+        raise ValueError("base do cálculo inválida (use construida ou terreno)")
+    op = next((o for o in opcoes_area(job_id)[base] if o["campo"] == campo), None)
+    if op is None:
+        raise ValueError(f"área \"{campo}\" não está entre as opções de {ROTULO_BASE[base]}")
+    d = {"base": base, "campo": campo, "valor": op["valor"], "origem": op["origem"]}
+    db.set_setting(_chave_escolha(job_id), json.dumps(d, ensure_ascii=False))
+    return d
+
+
+def apagar_escolha_area(job_id: str) -> None:
+    db.set_setting(_chave_escolha(job_id), "")
+
+
+def base_area(job_id: str) -> str:
+    return (escolha_area(job_id) or {}).get("base", "construida")
+
+
+def refs_na_base(job_id: str | None, refs: list, base: str | None = None) -> list:
+    """Base terreno: o unitário de cada referencial é preço ÷ área do TERRENO (lote_m2). Devolve
+    cópias com area_m2 = lote_m2 (cálculo, tabela de amostras e planilha usam a mesma área).
+    Referencial escolhido sem lote_m2: ValueError com o nº."""
+    # 094-1: "só comparação" (D-069) nunca entra na conta, mesmo marcado como escolhido
+    refs = [r for r in refs if getattr(r, "decisao", "") != "comparacao"]
+    base = base or (base_area(job_id) if job_id else "construida")
+    if base != "terreno":
+        return list(refs)
+    sem = [r.n for r in refs if getattr(r, "escolhido", True) and not r.lote_m2]
+    if sem:
+        raise ValueError("referencial sem área de terreno (necessária na base terreno): nº "
+                         + ", ".join(map(str, sem)))
+    return [r.model_copy(update={"area_m2": r.lote_m2}) if r.lote_m2 else r for r in refs]
+
+
 def _area_construida(job_id: str):
-    """(valor, origem) da área construída do avaliando: campo cujo nome contém 'area' e
-    'constru' (origem documento antes de vistoria); (None, 'pendente') se não houver."""
+    """(valor, origem) da área do cálculo: a ESCOLHIDA pelo avaliador (ORDEM 021) primeiro;
+    senão, o campo de área construída (documento antes de vistoria); (None, 'pendente')."""
+    esc = escolha_area(job_id)
+    if esc:
+        op = next((o for o in opcoes_area(job_id).get(esc["base"], []) if o["campo"] == esc["campo"]), None)
+        if op:
+            return Decimal(str(op["valor"])), op["origem"]
+        return Decimal(str(esc["valor"])), esc.get("origem") or "documento"
     areas = _areas_construidas(job_id)
     return (areas[0][0], areas[0][1]) if areas else (None, "pendente")
 
@@ -214,15 +402,34 @@ def anuncio_velho(r: Referencial, data_base: date | None) -> bool:
 
 async def rodar(job_id: str) -> Selecao:
     t = _comum.trabalho(job_id)
-    cands = db.candidatos(job_id)
+    todos = db.candidatos(job_id)
+    if any(r.decisao == "entra" for r in todos):
+        # lista da pesquisa: só os escolhidos pelo avaliador seguem (e a IA só vê esses)
+        cands = [r for r in todos if r.decisao == "entra"
+                 or (r.fonte_coleta == MANUAL and r.decisao not in ("descarta", "comparacao"))]   # 094-1: o #7 entrava aqui
+        fora = [r.model_copy(update={"escolhido": False, "justificativa": (
+            f"descartado pelo avaliador{': ' + r.motivo_descarte if r.motivo_descarte else ''}"
+            if r.decisao == "descarta" else "não escolhido pelo avaliador na lista")})
+            for r in todos if r not in cands and r.decisao != "comparacao"]
+    else:
+        cands, fora = [r for r in todos if r.decisao != "comparacao"], []
+    fora += [r.model_copy(update={"escolhido": False, "justificativa": "só comparação (fora do cálculo, D-069)"})
+             for r in todos if r.decisao == "comparacao" and r not in fora]
     area = area_construida(job_id)
     campos = [c.model_dump(mode="json") for c in db.campos(job_id)]
     curva = fora_da_curva(cands)   # regra objetiva, antes da IA
-    sistema = conhecimento.texto("P0", "P3") + "\n\n" + INSTRUCAO
+    sistema = conhecimento.base(job_id, ("P0", "P3"), ("pesquisa", "cálculo")) + "\n\n" + INSTRUCAO
     prompt = ("Trabalho:\n" + t.model_dump_json(indent=2)
               + f"\n\nCampos do avaliando:\n{campos}\n\nCandidatos:\n"
               + "\n".join(r.model_dump_json(exclude={"foto", "print_"}) for r in cands)
               + db.texto_correcoes(job_id, "selecao"))
+    manuais = {r.n for r in cands if (r.fonte_coleta == MANUAL or r.decisao == "entra")
+               and r.area_m2 and r.preco}
+    if manuais:
+        prompt += ("\n\nReferenciais ESCOLHIDOS PELO AVALIADOR (n " + ", ".join(map(str, sorted(manuais)))
+                   + "): ficam na amostra. Marque escolhido=true; se algum tiver ponto de "
+                   "atenção (ex.: barracão independente), diga na justificativa, sem excluir.")
+    curva = {n: m for n, m in curva.items() if n not in manuais}  # escolha do avaliador vale
     if curva:
         prompt += ("\n\nExcluídos em código (não escolha; motivo_exclusao \"regra\"):\n"
                    + "\n".join(f"- n {n}: {m}" for n, m in sorted(curva.items())))
@@ -238,6 +445,15 @@ async def rodar(job_id: str) -> Selecao:
         if not r.area_m2 or not r.preco:
             upd = {"escolhido": False, "justificativa": "excluído: "
                    + ("área construída ausente" if not r.area_m2 else "preço ausente")}
+        elif r.n in manuais:
+            # referencial escolhido pelo avaliador nunca é excluído pela IA (só avisa)
+            just = (d.justificativa.strip() if d else "")
+            if d is not None and not d.escolhido:
+                db.evento(job_id, "selecao", "aviso",
+                          f"referencial {r.n} (escolhido pelo avaliador) mantido; "
+                          f"atenção da IA: {just or 'sem motivo informado'}")
+                just = f"Escolhido pelo avaliador (mantido). Atenção: {just}".strip()
+            upd = {"escolhido": True, "justificativa": just or "escolhido pelo avaliador"}
         else:
             upd = {"escolhido": bool(d and d.escolhido),
                    "justificativa": (d.justificativa.strip() if d else "")
@@ -270,24 +486,25 @@ async def rodar(job_id: str) -> Selecao:
                                  "similaridade entre os restantes); IA: " + r.justificativa})
                     if r.n in add else r for r in refs]
             if n_esc + falta < MIN_ESCOLHIDOS:
-                declaracao = (f"Amostra reduzida: apenas {n_esc + falta} referencial(is) "
-                              "semelhante(s) disponível(is) no mercado pesquisado.")
+                declaracao = (f"Amostra reduzida: apenas {pl(n_esc + falta, 'referencial semelhante disponível', 'referenciais semelhantes disponíveis')} "
+                              "no mercado pesquisado.")
             else:
-                declaracao = (f"Foram identificados apenas {n_esc} referencial(is) plenamente "
-                            f"semelhante(s); a amostra foi completada com {falta} referencial(is) "
+                declaracao = (f"Foram identificados apenas {pl(n_esc, 'referencial plenamente semelhante', 'referenciais plenamente semelhantes')}; "
+                            f"a amostra foi completada com {pl(falta, 'referencial', 'referenciais')} "
                             "de maior similaridade disponível no mercado.")
         else:
-            declaracao = (f"Amostra reduzida: apenas {len(validos)} referencial(is) válido(s) "
-                          "disponível(is) no mercado pesquisado.")
+            declaracao = (f"Amostra reduzida: apenas {pl(len(validos), 'referencial válido disponível', 'referenciais válidos disponíveis')} "
+                          "no mercado pesquisado.")
 
-    faixa = Decimal("10")
-    if resp.faixa_pct is not None:
-        if Decimal("0") < resp.faixa_pct <= Decimal("30"):
-            faixa = resp.faixa_pct
-        else:
-            db.evento(job_id, "selecao", "aviso",
-                      f"faixa_pct {resp.faixa_pct} fora de (0, 30]; adotado 10")
-    unitario, just_u = resp.unitario_adotado, resp.justificativa_unitario
+    # Faixa padrão ±10%: outra faixa só com aval do avaliador (confirmação na tela); a da IA
+    # fica registrada como proposta.
+    faixa = FAIXA_PADRAO
+    if resp.faixa_pct is not None and resp.faixa_pct != FAIXA_PADRAO:
+        db.evento(job_id, "selecao", "info",
+                  f"IA propôs faixa ±{resp.faixa_pct}%; adotado ±{FAIXA_PADRAO}% até o "
+                  "avaliador confirmar")
+    # 082-4: a IA só PROPÕE o unitário (fica em proposta_ia); o adotado é a média até o avaliador decidir
+    unitario, just_u = None, ""
     if unitario is not None:
         # centavos: com mais casas, "área × unitário" impresso no laudo não fecha com o valor
         unitario = unitario.quantize(Decimal("0.01"))
@@ -298,15 +515,21 @@ async def rodar(job_id: str) -> Selecao:
         db.evento(job_id, "selecao", "aviso", "área construída do avaliando ausente")
         unitario, just_u = None, ""
     elif unitario is not None:
-        escolhidos = [r for r in refs if r.escolhido]
         try:
+            escolhidos = refs_na_base(job_id, [r for r in refs if r.escolhido])
             calculo.calcular(area, escolhidos, unitario, faixa)
         except ValueError as e:
             db.evento(job_id, "selecao", "aviso", f"unitário adotado descartado: {e}")
             unitario, just_u = None, ""
 
+    refs = sorted(refs + fora, key=lambda r: r.n)
     s = Selecao(refs=refs, unitario_adotado=unitario, justificativa_unitario=just_u,
-                faixa_pct=faixa, declaracao_amostra=declaracao)
+                faixa_pct=faixa, declaracao_amostra=declaracao,
+                proposta_ia=PropostaIA(
+                    unitario_adotado=(resp.unitario_adotado.quantize(Decimal("0.01"))
+                                      if resp.unitario_adotado is not None else None),
+                    justificativa_unitario=resp.justificativa_unitario,
+                    faixa_pct=resp.faixa_pct))
     db.salvar_candidatos(job_id, refs)
     db.evento(job_id, "selecao", "resultado",
               f"{sum(r.escolhido for r in refs)} de {len(refs)} referenciais escolhidos",

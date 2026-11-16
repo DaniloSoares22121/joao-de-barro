@@ -189,8 +189,7 @@ def test_escolher_referenciais_e_recalcular(client, dono, monkeypatch):
     assert {x["n"] for x in sel["refs"] if x["escolhido"]} == set(validos)
     assert all(x["justificativa"].startswith("escolha manual do avaliador") for x in sel["refs"])
     # Recalcular: reabre a partir do cálculo e enfileira
-    assert client.post(f"{API}/jobs/{jid}/reabrir", json={"etapa": "selecao"},
-                       headers=h).status_code == 422
+    # 165: reabrir a partir da seleção hoje é aceito (o avaliador refaz a escolha na tela); o "Recalcular" é o cálculo
     assert client.post(f"{API}/jobs/{jid}/reabrir", json={"etapa": "calculo"},
                        headers=h).status_code == 202
     assert fila == [jid] and db.resultado(jid, "entrega") is None
@@ -218,7 +217,7 @@ def test_escolher_referenciais_e_recalcular(client, dono, monkeypatch):
      {"tipo": "preencher_trabalho", "campo": "processo_numero"}),
     ("montagem: documento do solicitante sem tarja: rg.pdf",
      {"tipo": "enviar_arquivo", "tipo_arquivo": "solicitante"}),
-    ("amostra com menos de 5 referenciais: Amostra reduzida", {"tipo": "ligar_coletor"}),
+    # 165: saiu "amostra com menos de 5 → ligar o Coletor": a busca automática pelo Coletor saiu do sistema (D-117)
     ("PDF não gerado (LibreOffice ausente)", None),
 ])
 def test_acao_da_pendencia(texto, acao):
@@ -267,8 +266,8 @@ def test_aviso_de_fim_envia_uma_vez(monkeypatch):
     tel, corpo, _ = enviados[0]
     assert tel == "62999990000"
     n = len(db.resultado(jid, "entrega")["pendencias"])
-    assert corpo == (f"João de Barro: laudo nº 120 – Marina (Sobrado, Jardim Vila Boa) {st}. "
-                     f"{n} pendência(s). https://jdb.exemplo.com/#/job/{jid}")
+    assert corpo == (f"JdB Laudo: laudo nº 120 – Marina (Sobrado, Jardim Vila Boa) {st}. "
+                     f"{n} {'pendência' if n == 1 else 'pendências'}. https://jdb.exemplo.com/#/job/{jid}")
     T._rodar(jid)  # já entregue: não avisa de novo
     assert len(enviados) == 1
 
@@ -342,9 +341,9 @@ def test_escolha_manual_preservada_se_candidatos_iguais(client, dono, monkeypatc
     fonte_mercado.registrar(T._FonteOnline(novo))
     orquestrador.reabrir(jid, "pesquisa")
     assert T._rodar(jid) in orquestrador.FINAIS
-    assert not db.resultado(jid, "selecao").get("manual")
-    pend = [p["texto"] for p in db.resultado(jid, "entrega")["pendencias"]]
-    assert any("escolha manual descartada (novos candidatos)" in p for p in pend), pend
+    # 165 (112/D-117): a escolha é do avaliador — candidato novo NÃO derruba a escolha manual nem roda a IA da seleção
+    assert db.resultado(jid, "selecao").get("manual") is True
+    assert sum(v for k, v in n.items() if k.endswith("@selecao")) == ia_sel
 
 
 def test_aviso_usa_telefone_avisos_e_avisa_proprio_numero(client, dono, monkeypatch):

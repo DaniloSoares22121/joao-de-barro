@@ -53,7 +53,7 @@ def test_diagramacao_aponta_cada_falha(tmp_path):
     jid = T._job()[0]
     ds = _descrs(jid, p)
     assert any("página 3 quase vazia" in x for x in ds), ds
-    assert any("2 foto(s) e só 1 legenda" in x for x in ds), ds
+    assert any("2 fotos e só 1 legenda" in x for x in ds), ds
     assert any("FINALIDADE DA AVALIAÇÃO\" indicado na página 3, está na 1" in x for x in ds), ds
     assert not any("PESQUISA" in x and "sumário" in x for x in ds), ds
     assert any("composto por 9 páginas\" mas o PDF tem 5" in x for x in ds), ds

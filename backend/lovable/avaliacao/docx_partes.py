@@ -166,12 +166,47 @@ def caber(img: Path, max_cx: int, max_cy: int) -> tuple[int, int]:
     return int(w * esc), int(h * esc)
 
 
+DPI_IMAGEM = 200          # resolução final das imagens no Word (impressão boa, arquivo leve)
+QUALIDADE_JPEG = 82
+
+
+def comprimir(img: Path, cx: int, cy: int) -> Path:
+    """Cópia da imagem reduzida ao tamanho em que aparece (DPI_IMAGEM) e em JPEG: fotos de
+    celular de 3–4 MB deixavam o .docx com 20+ MB. PNG com transparência fica como está.
+    Cache em %TEMP%/jdb-img (chave = caminho + data + tamanho + caixa)."""
+    import hashlib
+    import tempfile
+    img = Path(img)
+    alvo_w = max(1, int(cx / 914400 * DPI_IMAGEM))
+    alvo_h = max(1, int(cy / 914400 * DPI_IMAGEM))
+    try:
+        st = img.stat()
+        with Image.open(img) as im:
+            if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+                return img
+            if im.width <= alvo_w * 1.15 and st.st_size <= 400_000:
+                return img
+            chave = hashlib.sha1(f"{img.resolve()}|{st.st_mtime_ns}|{st.st_size}|{alvo_w}x{alvo_h}"
+                                 .encode()).hexdigest()[:20]
+            pasta = Path(tempfile.gettempdir()) / "jdb-img"
+            pasta.mkdir(exist_ok=True)
+            destino = pasta / f"{chave}.jpg"
+            if not destino.is_file():
+                im2 = im.convert("RGB")
+                im2.thumbnail((alvo_w, alvo_h), Image.LANCZOS)
+                im2.save(destino, "JPEG", quality=QUALIDADE_JPEG, optimize=True)
+            return destino
+    except (OSError, ValueError):
+        return img
+
+
 def trocar_imagem(container, part, img: Path, max_cx: int, max_cy: int) -> None:
     """Troca a imagem do 1º w:drawing de `container`, ajustando o tamanho à caixa."""
+    cx, cy = caber(img, max_cx, max_cy)
+    img = comprimir(img, cx, cy)
     rid, _ = part.get_or_add_image(str(img))
     dr = container.find(".//" + qn("w:drawing"))
     dr.find(".//" + qn("a:blip")).set(qn("r:embed"), rid)
-    cx, cy = caber(img, max_cx, max_cy)
     for tag in ("wp:extent", "a:ext"):
         for e in dr.iter(qn(tag)):
             e.set("cx", str(cx))
@@ -257,7 +292,7 @@ def _negrito(rpr):
     return r
 
 
-def estilos_sumario(doc) -> None:
+def estilos_sumario(doc, compacto: bool = False) -> None:
     """Cria os estilos "toc 1" (negrito, como no P8) e "toc 2" se o modelo não os tiver —
     o LibreOffice/Word aplicam esses estilos ao refazer o campo TOC."""
     from docx.enum.style import WD_STYLE_TYPE
@@ -273,6 +308,15 @@ def estilos_sumario(doc) -> None:
             st.element.set(qn("w:styleId"), f"TOC{nivel}")
         st.font.bold = nivel == 1
         st.font.size = Pt(10)
+        if compacto:
+            # ORDEM 030: o LibreOffice/Word refazem o sumário com ESTE estilo — sumário longo
+            # (ex.: PTAM judicial) deixava 1 linha sozinha na página seguinte
+            st.paragraph_format.space_before = Pt(0)
+            st.paragraph_format.space_after = Pt(1)
+            st.paragraph_format.line_spacing = 1.05
+
+
+SUMARIO_LONGO = 29   # linhas a partir das quais o sumário fica compacto (cabem ~29 por página)
 
 
 def sumario(modelo_ppr, entradas: list[tuple[str, str, int]]) -> list:
@@ -296,8 +340,19 @@ def sumario(modelo_ppr, entradas: list[tuple[str, str, int]]) -> list:
         ppr.insert(0, st)
         if nivel:
             ind = OxmlElement("w:ind")
-            ind.set(qn("w:left"), "454")
+            ind.set(qn("w:left"), "908" if re.match(r"^\d+\.\d+\s+–\s", titulo) else "454")   # D-133
             ppr.append(ind)
+        if len(entradas) >= SUMARIO_LONGO:
+            # ORDEM 030: sumário longo (PTAM judicial com quesitos) passava 1 linha para outra
+            # página, quase vazia — linhas mais juntas para caber numa página só
+            for sp in ppr.findall(qn("w:spacing")):
+                ppr.remove(sp)
+            sp = OxmlElement("w:spacing")
+            sp.set(qn("w:before"), "0")
+            sp.set(qn("w:after"), "20")
+            sp.set(qn("w:line"), "252")
+            sp.set(qn("w:lineRule"), "auto")
+            ppr.append(sp)
         p.append(ppr)
         rpr_e = rpr if nivel else _negrito(rpr)
         if i == 0:
@@ -322,7 +377,18 @@ def sumario(modelo_ppr, entradas: list[tuple[str, str, int]]) -> list:
 
 
 def texto_por_partes(t: str) -> list[str]:
-    return [x.strip() for x in re.split(r"\n\s*\n", t.strip()) if x.strip()]
+    """Parágrafos separados por linha em branco; dentro de um parágrafo, linhas de lista ("- …", "• …") viram um
+    parágrafo cada (087: no 9120 o item 10 saiu numa linha só, "- casa térrea…; - idade aparente…")."""
+    out: list[str] = []
+    for bloco in re.split(r"\n\s*\n", t.strip()):
+        linhas = [ln.strip() for ln in bloco.splitlines() if ln.strip()]
+        itens = [ln for ln in linhas if re.match(r"^[-•*–]\s+", ln)]
+        if len(itens) >= 2:
+            for ln in linhas:
+                out.append("• " + re.sub(r"^(?:[-•*–—]\s+)+", "", ln) if re.match(r"^[-•*–]\s+", ln) else ln)
+        elif bloco.strip():
+            out.append(bloco.strip())
+    return out
 
 
 # ------------------------------------------------------------------ estrutura (títulos, seções, sumário)
@@ -345,19 +411,62 @@ def titulos(ctx) -> list:
                    for b in p.iter(qn("w:bookmarkStart")))]
 
 
-def escrever(ctx, alvo, conteudo: str) -> list:
-    """Substitui o parágrafo-modelo `alvo` pelos parágrafos de `conteudo`."""
+def _parecido(a: str, b: str) -> bool:
+    """Mesmo parágrafo em outra redação: igualdade, um contém o outro, ou ≥ 70% iguais."""
+    import difflib
+    a, b = norm(a).strip(" .;-•*"), norm(b).strip(" .;-•*")
+    if not a or not b:
+        return False
+    if a == b or (len(a) > 40 and a[:60] in b) or (len(b) > 40 and b[:60] in a):
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.7
+
+
+def escrever(ctx, alvo, conteudo: str, fixos: list[str] = ()) -> list:
+    """Substitui o parágrafo-modelo `alvo` pelos parágrafos de `conteudo`. Parágrafo que
+    repete um texto fixo da mesma seção (`fixos`) ou outro já escrito é descartado: a IA
+    reescrevia a definição de valor de mercado e as ressalvas genéricas, que o modelo já tem."""
     ppr = alvo.find(qn("w:pPr"))
     lista = ppr is not None and ppr.find(qn("w:pStyle")) is not None and \
         "List" in (ppr.find(qn("w:pStyle")).get(qn("w:val")) or "")
     partes = [ln.strip() for ln in conteudo.splitlines() if ln.strip()] if lista \
         else texto_por_partes(conteudo)
+    unicos: list[str] = []
+    for parte in partes:
+        if any(_parecido(parte, f) for f in fixos) or any(_parecido(parte, u) for u in unicos):
+            if hasattr(ctx, "aviso"):
+                ctx.aviso(f"parágrafo repetido descartado: {parte[:80]}")
+            continue
+        unicos.append(parte)
+    partes = unicos
     rpr = rpr_base(alvo)
     ref, novos = alvo, []
+    sub = False                     # 105-4: os pontos abaixo de "Estado de conservação:" são subitens (recuados)
     for parte in partes:
         p = copy.deepcopy(alvo)
         limpar_runs(p)
-        parte = parte.lstrip("-•* ").strip() if lista else parte
+        if lista:
+            marcado = bool(re.match(r"^[-•*–—]", parte))
+            if re.match(r"(?i)^[-•*–— ]*estado de conserva", parte):
+                sub = True
+                recua = False
+            else:
+                topico = bool(re.match(r"^[-•*–— ]*[^:]{2,40}:\s+\S", parte))
+                recua = sub and marcado and not topico
+                if topico or not marcado:
+                    sub = False                 # o tópico seguinte (ou a frase final) encerra os subitens
+            if recua:
+                pp = p.find(qn("w:pPr"))
+                if pp is None:
+                    pp = OxmlElement("w:pPr")
+                    p.insert(0, pp)
+                for e in pp.findall(qn("w:ind")):
+                    pp.remove(e)
+                ind = OxmlElement("w:ind")
+                ind.set(qn("w:left"), "1080")
+                ind.set(qn("w:hanging"), "360")
+                pp.append(ind)
+        parte = parte.lstrip("-•*–— ").strip() if lista else parte      # 093-A-12: um marcador só
         m = re.match(r"^([^:]{2,40}):\s+(.*)$", parte) if lista else None
         if m:
             p.append(novo_run(m.group(1) + ": ", rpr, negrito=True))
@@ -372,22 +481,29 @@ def escrever(ctx, alvo, conteudo: str) -> list:
 
 def secoes(ctx) -> None:
     chave, grupos, tits = None, {}, set(titulos(ctx))
+    fixos: dict[str, list[str]] = {}
+    so_amj: set[str] = set()
     for el in list(ctx.body):
         if el.tag == qn("w:p"):
             m = _RE_TITULO.match(texto(el).strip())
             if m and el in tits:
                 chave = m.group(1)
+                if "(somente AMJ)" in texto(el):
+                    so_amj.add(chave)
                 continue
             if PLACEHOLDER in texto(el) and chave:
                 grupos.setdefault(chave, []).append(el)
+            elif chave and texto(el).strip():
+                fixos.setdefault(chave, []).append(texto(el).strip())
     for k, els in grupos.items():
         conteudo = (ctx.textos.secoes.get(k) or "").strip()
         if not conteudo:
-            ctx.aviso(f"seção {k} sem texto da redação")
+            if not (k in so_amj and ctx.t.modalidade != "AMJ"):   # item só do AMJ: sai calado
+                ctx.aviso(f"seção {k} sem texto da redação")
             for e in els:
                 remover(e)
             continue
-        escrever(ctx, els[0], conteudo)
+        escrever(ctx, els[0], conteudo, fixos.get(k, []))
         for e in els[1:]:
             remover(e)
 
@@ -461,6 +577,8 @@ def montar_sumario(ctx) -> None:
         txt = texto(h).strip()
         m = _RE_TITULO.match(txt)
         nivel = 1 if (txt.startswith("Anexo") or (m and "." in m.group(1))) else 0
+        if re.match(r"^\d+\.\d+\s+–\s", txt):      # D-133: "3.1 – Escritura" (documento dentro do anexo):
+            nivel = 1                                 # nível do anexo, com recuo maior no sumário
         set_outline(h, nivel)
         bm = next(b.get(qn("w:name")) for b in h.iter(qn("w:bookmarkStart")))
         entradas.append((txt, bm, nivel))
@@ -474,7 +592,7 @@ def montar_sumario(ctx) -> None:
             modelo_ppr = copy.deepcopy(el.find(qn("w:pPr")))
         remover(el)
         el = prox
-    estilos_sumario(ctx.doc)
+    estilos_sumario(ctx.doc, compacto=len(entradas) >= SUMARIO_LONGO)
     ref = alvo
     for p in sumario(modelo_ppr, entradas):
         ref = inserir_apos(ref, p)

@@ -52,7 +52,7 @@ def _erro(msg: str) -> None:
         from tkinter import messagebox
         raiz = tk.Tk()
         raiz.withdraw()
-        messagebox.showerror("João de Barro — Coletor", msg, parent=raiz)
+        messagebox.showerror("JdB Laudo — Coletor", msg, parent=raiz)
         raiz.destroy()
     except Exception:
         pass

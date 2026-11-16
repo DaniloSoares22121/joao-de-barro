@@ -48,23 +48,23 @@ async def _cenario(tarefas, quedas=0):
 
 
 def test_tarefa_permitida_e_proibida():
-    url = "https://www.zapimoveis.com.br/imovel/x/"
+    url = "https://maps.app.goo.gl/abc"
     rec, cons, nav, auths = asyncio.run(_cenario([
-        {"tipo": "tarefa", "id": "1", "job": "j", "acao": "anuncio", "url": url},
-        {"tipo": "tarefa", "id": "2", "job": "j", "acao": "busca", "url": "https://evil.com/"},
+        {"tipo": "tarefa", "id": "1", "job": "j", "acao": "maps", "url": url},
+        {"tipo": "tarefa", "id": "2", "job": "j", "acao": "maps", "url": "https://evil.com/"},
     ]))
     assert rec[0]["tipo"] == "ola" and rec[0]["versao"]
     assert rec[1]["tipo"] == "resultado" and rec[1]["id"] == "1" and rec[1]["ok"]
     assert rec[2] == {"tipo": "resultado", "id": "2", "ok": False, "bloqueado": False,
                       "erro": "url não permitida"}
-    assert nav.chamadas == [(url, "anuncio")]
+    assert nav.chamadas == [(url, "maps")]
     assert cons[0] == "/ws/avaliacao/coletor"   # token nunca na URL
     assert auths[0] == "Bearer tok"
 
 
 def test_reconecta_apos_queda():
     rec, cons, nav, auths = asyncio.run(_cenario(
-        [{"tipo": "tarefa", "id": "9", "acao": "busca", "url": "https://www.olx.com.br/imoveis"}],
+        [{"tipo": "tarefa", "id": "9", "acao": "maps", "url": "https://maps.app.goo.gl/abc"}],
         quedas=2))
     assert len(cons) == 3
     assert rec[-1]["id"] == "9" and rec[-1]["ok"]

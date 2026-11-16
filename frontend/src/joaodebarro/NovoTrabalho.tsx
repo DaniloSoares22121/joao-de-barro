@@ -1,19 +1,21 @@
+import { FalarAqui } from './Falar'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ApiError, get, post } from './api'
 import { ZonasArquivos, ehAuth, mensagemErro, useEnvio } from './Envio'
-import { MODALIDADES } from './rotulos'
+import { plural, MODALIDADES } from './rotulos'
 import { useStore } from './store'
 import {
-  formVazio, paraPayload, validar,
+  AJUDA_CHECKLIST, AJUDA_OBS_VISTORIA, AJUDA_VISITA_POR, formVazio, paraPayload, validar,
   type CampoForm, type Erros, type FormTrabalho,
 } from './validacao'
 
-const FINALIDADES = ['Venda', 'Locação', 'Venda e locação', 'Garantia', 'Judicial', 'Outra']
+const FINALIDADES =['Venda', 'Locação', 'Venda e locação', 'Garantia', 'Judicial', 'Outra']
 
 const ROTULOS: Record<CampoForm, string> = {
   numero: 'Nº do trabalho', modalidade: 'Modalidade', finalidade: 'Finalidade', cliente: 'Solicitante',
   tipo: 'Tipo do imóvel', bairro: 'Bairro ou condomínio', cidade: 'Cidade', pin_maps: 'Pin no Google Maps',
   data_base: 'Data-base', data_vistoria: 'Data da vistoria', contexto: 'Contexto',
+  obs_vistoria: 'Observações da vistoria', checklist_vistoria: 'Checklist de vistoria', data_emissao: 'Data de emissão', visita_por: 'Visita técnica feita por', objeto_parte: 'Parte avaliada',
   processo_numero: 'Nº do processo', vara_juizo: 'Juízo / Vara', acao: 'Ação', autor: 'Autor',
   reu: 'Réu', quesitos: 'Quesitos',
 }
@@ -37,6 +39,8 @@ export default function NovoTrabalho() {
   const prefill = useStore((s) => s.prefill)
   const [form, setForm] = useState<FormTrabalho>(() => ({ ...formVazio(), ...(prefill ?? {}) }))
   const [erros, setErros] = useState<Erros>({})
+  // ORDEM 032-2: objeto da avaliação — imóvel inteiro ou parte (qual)
+  const [parte, setParte] = useState(false)
   const [tentou, setTentou] = useState(false)
   const envio = useEnvio()
   const [enviando, setEnviando] = useState(false)
@@ -83,7 +87,8 @@ export default function NovoTrabalho() {
     e.preventDefault()
     setErroGeral('')
     setTentou(true)
-    const ev = jobId.current ? {} : validar(form)
+    const ev: Erros = jobId.current ? {} : validar(form)
+    if (!jobId.current && parte && !form.objeto_parte.trim()) ev.objeto_parte = 'Diga qual parte do imóvel é avaliada (ex.: Galpão 01) ou marque “Imóvel inteiro”.'
     setErros(ev)
     if (Object.keys(ev).length) {
       requestAnimationFrame(() => resumo.current?.focus())
@@ -114,7 +119,7 @@ export default function NovoTrabalho() {
       const falhou = await envio.enviarPendentes(id, setPasso)
       if (falhou === null) return
       if (falhou) {
-        setErroGeral(`${falhou} arquivo(s) não foram enviados. Remova-os ou tente novamente — o trabalho já foi criado e não será duplicado.`)
+        setErroGeral(`${falhou === 1 ? '1 arquivo não foi enviado' : `${falhou} arquivos não foram enviados`}. Remova-os ou tente novamente — o trabalho já foi criado e não será duplicado.`)
         return
       }
       setPasso('Iniciando a avaliação…')
@@ -135,8 +140,10 @@ export default function NovoTrabalho() {
     <form onSubmit={enviar} noValidate className="mx-auto max-w-3xl space-y-5">
       <div>
         <button type="button" className="btn-link -ml-2" onClick={() => ir('lista')} disabled={enviando}>← Trabalhos</button>
-        <h1 className="mt-1 text-xl font-semibold text-stone-900">Novo trabalho</h1>
-        <p className="text-sm text-stone-500">Dados de entrada do imóvel (checklist P5). O laudo é montado depois do envio.</p>
+        <h1 className="titulo-pag mt-1">Novo trabalho</h1>
+        <p className="text-sm text-stone-500">Dados de entrada do imóvel. O laudo é montado depois do envio.</p>
+        {/* 155-2: a contagem do plano, antes de começar */}
+        <p className="texto mt-1">Este trabalho conta 1 laudo do seu plano quando o primeiro rascunho ficar pronto.</p>
       </div>
 
       <section className="cartao-pad space-y-4" aria-labelledby="sec-dados">
@@ -185,11 +192,52 @@ export default function NovoTrabalho() {
           <Campo id="f-data_vistoria" rotulo="Data da vistoria" erro={erros.data_vistoria}>
             <input {...propsInput('data_vistoria')} type="date" />
           </Campo>
+          <Campo id="f-data_emissao" rotulo="Data de emissão" erro={erros.data_emissao}
+                 ajuda="Data que sai no laudo. Padrão: hoje.">
+            <input {...propsInput('data_emissao')} type="date" />
+          </Campo>
         </div>
+        <fieldset className="space-y-2" aria-describedby="objeto-ajuda">
+          <legend className="rotulo">Objeto da avaliação</legend>
+          <p id="objeto-ajuda" className="text-xs text-[var(--cinza)]">
+            Parte do imóvel (ex.: um galpão dentro de um lote maior): o valor é só dessa parte e o lote entra como contexto.
+          </p>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="objeto" checked={!parte} disabled={enviando}
+                     onChange={() => { setParte(false); setForm((f) => ({ ...f, objeto_parte: '' })) }} />
+              Imóvel inteiro
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="objeto" checked={parte} disabled={enviando}
+                     onChange={() => setParte(true)} />
+              Parte do imóvel
+            </label>
+          </div>
+          {parte && (
+            <Campo id="f-objeto_parte" rotulo="Qual parte?" erro={erros.objeto_parte}>
+              <input {...propsInput('objeto_parte')} placeholder="Ex.: Galpão 01" autoComplete="off" />
+            </Campo>
+          )}
+        </fieldset>
+        <Campo id="f-visita_por" rotulo="Visita técnica feita por (nome, registro)" erro={erros.visita_por}
+               ajuda={AJUDA_VISITA_POR}>
+          <input {...propsInput('visita_por')} placeholder="Opcional — ex.: João da Silva, CRECI 12345/GO" autoComplete="off" />
+        </Campo>
+        <Campo id="f-obs_vistoria" rotulo="Observações da vistoria"
+               ajuda={AJUDA_OBS_VISTORIA}>
+          <textarea {...propsInput('obs_vistoria')} rows={3} />
+          <FalarAqui alvo="f-obs_vistoria" valor={form.obs_vistoria} aoMudar={(v) => alterar('obs_vistoria', v)} />
+        </Campo>
+        <Campo id="f-checklist_vistoria" rotulo="Checklist de vistoria (colar do celular)"
+               ajuda={AJUDA_CHECKLIST}>
+          <textarea {...propsInput('checklist_vistoria')} rows={10} className={`input min-h-[12rem] font-mono text-xs ${erros.checklist_vistoria ? 'input-erro' : ''}`} />
+        </Campo>
         <Campo id="f-contexto" rotulo="Contexto (opcional)"
-               ajuda="Informação verbal — não entra no laudo (D-013). Serve só para orientar a análise.">
+               ajuda="Informação verbal — não entra no laudo. Serve só para orientar a análise.">
           <textarea {...propsInput('contexto')} rows={3}
                     placeholder="Ex.: proprietário informou reforma recente; priorizar o bairro vizinho na pesquisa." />
+          <FalarAqui alvo="f-contexto" valor={form.contexto} aoMudar={(v) => alterar('contexto', v)} />
         </Campo>
       </section>
 
@@ -245,7 +293,7 @@ export default function NovoTrabalho() {
       {tentou && qtErros > 0 && (
         <div ref={resumo} tabIndex={-1} role="alert"
              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <p className="font-medium">Corrija {qtErros} campo(s) para continuar:</p>
+          <p className="font-medium">Corrija {plural(qtErros, 'campo', 'campos')} para continuar:</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {(Object.keys(erros) as CampoForm[]).map((c) => (
               <li key={c}>
@@ -266,7 +314,7 @@ export default function NovoTrabalho() {
         {enviando && <span className="text-sm text-stone-500 sm:mr-auto" role="status">{passo}</span>}
         <button type="button" className="btn-sec" onClick={() => ir('lista')} disabled={enviando}>Cancelar</button>
         <button type="submit" className="btn" disabled={enviando}>
-          {enviando ? 'Enviando…' : jobId.current ? 'Tentar novamente' : total ? `Criar e enviar ${total} arquivo(s)` : 'Criar e iniciar'}
+          {enviando ? 'Enviando…' : jobId.current ? 'Tentar novamente' : total ? `Criar e enviar ${plural(total, 'arquivo', 'arquivos')}` : 'Criar e iniciar'}
         </button>
       </div>
     </form>

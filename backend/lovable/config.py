@@ -1,28 +1,16 @@
-"""Configuração do servidor do João de Barro (variáveis de ambiente; `.env` na raiz do repo)."""
-from __future__ import annotations
-
+"""Configuração local (substitui a config do Brixly). Tudo ajustável por variável de ambiente."""
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv(BASE_DIR / ".env")
-except Exception:  # sem python-dotenv: só o ambiente
-    pass
-
-DATA_DIR = Path(os.environ.get("LOVABLE_DATA_DIR", BASE_DIR / "data")).resolve()
+DATA_DIR = Path(os.environ.get("LOVABLE_DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-HOST = os.environ.get("JDB_HOST", "127.0.0.1")
-PORT = int(os.environ.get("JDB_PORT", "8870"))
-
-# IA: Claude pelo Agent SDK. Com ANTHROPIC_API_KEY no ambiente usa a chave; sem ela usa o
-# login do Claude Code deste computador (`claude` → /login).
-MODEL = os.environ.get("LOVABLE_MODEL", "claude-sonnet-5")
-FALLBACK_MODEL = os.environ.get("LOVABLE_FALLBACK_MODEL", "claude-sonnet-5")
-LIGHT_MODEL = os.environ.get("LOVABLE_LIGHT_MODEL", "claude-haiku-5-5").strip()
-CLAUDE_CLI = os.environ.get("LOVABLE_CLAUDE_CLI", "").strip()
-_e = os.environ.get("LOVABLE_EFFORT", "").strip().lower()
-ESFORCO = _e if _e in ("low", "medium", "high") else ""
+# Modelos usados pelo claude_agent_sdk (login do Claude Code nesta máquina ou ANTHROPIC_API_KEY)
+# ORDEM 071-C2: o melhor modelo nas etapas que pensam (o Alan escolheu "sem teto" de custo)
+MODEL = os.environ.get("LOVABLE_MODEL") or "claude-opus-5-5"
+LIGHT_MODEL = os.environ.get("LOVABLE_LIGHT_MODEL") or "claude-haiku-5-5"
+FALLBACK_MODEL = os.environ.get("LOVABLE_FALLBACK_MODEL") or None
+ESFORCO = os.environ.get("LOVABLE_ESFORCO") or ""
+# ORDEM 075 / D-117 / 112: não há pesquisa automática nos portais. O caminho é o Chrome do avaliador
+# (extensão "Enviar ao JdB") ou o cadastro à mão.
+CLAUDE_CLI = os.environ.get("LOVABLE_CLAUDE_CLI") or None

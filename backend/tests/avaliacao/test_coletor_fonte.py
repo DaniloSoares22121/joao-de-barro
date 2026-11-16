@@ -1,5 +1,4 @@
 import asyncio
-import io
 from datetime import date
 
 from PIL import Image
@@ -7,7 +6,6 @@ from PIL import Image
 from lovable.avaliacao import coletor_fonte, coletor_hub, db, fonte_mercado, ia
 from lovable.avaliacao.agentes import leitor_anuncio
 from lovable.avaliacao.coletor_hub import Captura
-from lovable.avaliacao.fonte_mercado import Consulta
 from lovable.avaliacao.modelos import Referencial, Trabalho
 from tests.avaliacao.conftest import numero_livre
 
@@ -50,68 +48,57 @@ def _setup(monkeypatch, executar):
     return pausas
 
 
-def test_um_portal_bloqueado(monkeypatch):
-    jid = _job()
-    chamadas = []
-
-    async def executar(job_id, acao, url, timeout=120):
-        chamadas.append((acao, url))
-        if "olx" in url or "vivareal" in url or "imovelweb" in url:
-            return Captura(bloqueado=True)
-        if acao == "busca":
-            return Captura(ok=True, links=["https://www.zapimoveis.com.br/imovel/a-1/",
-                                           "https://www.zapimoveis.com.br/venda/x/",
-                                           "https://www.zapimoveis.com.br/imovel/b-2/"])
-        if url.endswith("a-1/"):
-            return Captura(ok=True, url_final=url, fotos=["https://img/x.png"],
-                           foto_path="mercado/f-foto.png")
-        return Captura(ok=True, url_final=url, fotos=["https://img/x.png"])
-    pausas = _setup(monkeypatch, executar)
-    refs = asyncio.run(coletor_fonte.ColetorFonte().buscar(
-        jid, [Consulta(tipologia="Sobrado", bairro="Jardim Vila Boa", cidade="Goiânia")]))
-    assert [r.link for r in refs] == ["https://www.zapimoveis.com.br/imovel/a-1/",
-                                      "https://www.zapimoveis.com.br/imovel/b-2/"]
-    assert all(r.portal == "ZAP Imóveis" for r in refs)
-    assert refs[0].foto == "mercado/f-foto.png" and refs[1].foto == ""   # URL sem fotos_b64: nada
-    assert "portal bloqueado: OLX" in _avisos(jid)
-    assert len(pausas) == len(chamadas) - 1 and all(4 <= p <= 9 for p in pausas)
-
-
-def test_limite_20_anuncios(monkeypatch):
-    jid = _job()
-    abertos = []
-
-    async def executar(job_id, acao, url, timeout=120):
-        if acao == "busca":
-            return Captura(ok=True, links=[f"https://www.zapimoveis.com.br/imovel/{url[-12:]}{i}/"
-                                           for i in range(30)])
-        abertos.append(url)
-        return Captura(ok=True, url_final=url)
-    _setup(monkeypatch, executar)
-    f = coletor_fonte.ColetorFonte()
-    c = [Consulta(tipologia="Casa", bairro=b, cidade="Goiânia") for b in ("A", "B")]
-    refs = asyncio.run(f.buscar(jid, c))
-    refs += asyncio.run(f.buscar(jid, c))  # segunda rodada no mesmo trabalho não estoura
-    assert len(abertos) == 20 and len(refs) == 20
-
-
 def test_online_e_registro():
     assert coletor_fonte.ColetorFonte().online() == coletor_hub.online()
     assert isinstance(coletor_fonte.ColetorFonte(), fonte_mercado.FonteMercado)
+
+
+def _mapa_de_mentira(arq):
+    """Um "satélite" com variação de tom (quadradinhos), sem o vermelho do pino."""
+    im = Image.new("RGB", (100, 80), (90, 110, 80))
+    for x in range(0, 100, 10):
+        for y in range(0, 80, 10):
+            if (x + y) // 10 % 2:
+                im.paste((200, 190, 170), (x, y, x + 10, y + 10))
+    im.save(arq)
+
+
+def test_print_em_branco_nao_substitui_o_mapa_121(monkeypatch):
+    """121: o Maps devolveu a tela cinza: tenta de novo e, sem mapa, fica o de antes (imagem e resultado)."""
+    jid = _job()
+    pasta = db.pasta(jid)
+    (pasta / "mercado").mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 80), (242, 242, 242)).save(pasta / "mercado/cinza.jpg")
+    _mapa_de_mentira(pasta / "maps.png")
+    antes = (pasta / "maps.png").read_bytes()
+    vistos = []
+
+    async def executar(job_id, acao, url, timeout=120):
+        vistos.append(url)
+        return Captura(ok=True, print_path="mercado/cinza.jpg")
+    monkeypatch.setattr(coletor_hub, "executar", executar)
+    t = Trabalho.model_validate(db.job(jid)["dados"])
+    asyncio.run(coletor_fonte.capturar_maps(jid, t, refazer=True))
+    assert len(vistos) == 2                                           # tentou de novo (o link é o mesmo nos testes)
+    assert (pasta / "maps.png").read_bytes() == antes                 # o mapa bom ficou
+    with db._conn() as c:
+        msgs = [r[0] for r in c.execute("SELECT msg FROM av_events WHERE job=? AND etapa='localizacao'", (jid,))]
+    assert any("tela em branco" in m and "fica o mapa de antes" in m for m in msgs)
+    assert not any(m.startswith("mapa capturado") for m in msgs)
 
 
 def test_maps_grava_localizacao(monkeypatch):
     jid = _job()
     pasta = db.pasta(jid)
     (pasta / "mercado").mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (100, 80), "white").save(pasta / "mercado/m.jpg")
+    _mapa_de_mentira(pasta / "mercado/m.jpg")
     vistos = []
 
     async def executar(job_id, acao, url, timeout=120):
         vistos.append((acao, url))
         return Captura(ok=True, print_path="mercado/m.jpg")
 
-    async def perguntar(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def perguntar(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         assert [p.name for p in arquivos] == ["maps.png"] and cwd == pasta
         return esquema.model_validate({"poligono": [[10, 10], [500, 5], [50, -3], [1]]})
     monkeypatch.setattr(coletor_hub, "executar", executar)
@@ -119,8 +106,11 @@ def test_maps_grava_localizacao(monkeypatch):
     t = Trabalho.model_validate(db.job(jid)["dados"])
     asyncio.run(coletor_fonte.capturar_maps(jid, t))
     assert vistos == [("maps", "https://maps.app.goo.gl/x")]
+    # ORDEM 003 (lote do mapa a partir do pino, P6 erro 6): a localização grava também a
+    # posição do pino ("pino"); nesta imagem branca não há pino -> None.
     assert db.resultado(jid, "localizacao") == {"imagem": "maps.png",
-                                                "poligono": [[10, 10], [99, 5], [50, 0]]}
+                                                "poligono": [[10, 10], [99, 5], [50, 0]], "pino": None,
+                                                "fonte_poligono": "pino_ou_ia", "zoom": None}
     assert (pasta / "maps.png").exists()
     asyncio.run(coletor_fonte.capturar_maps(jid, t))   # retomável: não refaz
     assert len(vistos) == 1
@@ -137,71 +127,40 @@ def test_maps_offline_aviso(monkeypatch):
     assert any("mapa não capturado" in a for a in _avisos(jid))
 
 
-def test_offline_no_meio_propaga_e_zera_estado(monkeypatch):
-    jid = _job()
-
-    async def executar(job_id, acao, url, timeout=120):
-        if acao == "anuncio":
-            raise coletor_hub.ColetorOffline("caiu")
-        return Captura(ok=True, links=["https://www.zapimoveis.com.br/imovel/a-1/"])
-    _setup(monkeypatch, executar)
-    f = coletor_fonte.ColetorFonte()
-    import pytest
-    with pytest.raises(coletor_hub.ColetorOffline):
-        asyncio.run(f.buscar(jid, [Consulta(tipologia="Casa", bairro="A", cidade="G")]))
-    assert jid not in f._estado
-    f._st(jid)
-    f.encerrar(jid)
-    assert jid not in f._estado
-
-
-def test_busca_sem_resultados_nao_abre_vitrine(monkeypatch):
-    jid = _job()
-    chamadas = []
-    vitrine = ["https://www.zapimoveis.com.br/imovel/venda-apto-id-1/?source=showcase%2CERROR+PAGE"]
-
-    async def executar(job_id, acao, url, timeout=120):
-        chamadas.append((acao, url))
-        if "zapimoveis" in url:
-            return Captura(ok=True, url_final=url, links=vitrine,
-                           texto="Oops.\nNão conseguimos encontrar a página solicitada.")
-        return Captura(ok=True, url_final=url, status=404,
-                       links=["https://www.vivareal.com.br/imovel/x-id-2/"])
-    _setup(monkeypatch, executar)
-    c = Consulta(tipologia="Sobrado", bairro="Jardim Vila Boa", cidade="Goiânia")
-    refs = asyncio.run(coletor_fonte.ColetorFonte().buscar(jid, [c]))
-    assert refs == []
-    assert all(a == "busca" for a, _ in chamadas)
-    av = _avisos(jid)
-    assert "busca sem resultados: ZAP Imóveis" in av and "busca sem resultados: Viva Real" in av
-
-
 def test_hub_status_saneado():
     assert coletor_hub._status(404) == 404
     assert coletor_hub._status("404") is None and coletor_hub._status(True) is None
 
 
-def test_anuncio_indisponivel_nao_e_lido(monkeypatch):
+
+
+def test_mapa_em_branco_volta_a_ultima_captura_boa_125(monkeypatch):
+    """125-2: o maps.png já está em branco e a nova captura também sai em branco: volta a última captura boa."""
+    import os
+    import time
     jid = _job()
-    base = "https://www.zapimoveis.com.br/imovel/"
-    links = [base + "a-1/", base + "b-2/", base + "c-3/", base + "d-4/"]
+    pasta = db.pasta(jid)
+    (pasta / "mercado").mkdir(parents=True, exist_ok=True)
+    boa = pasta / "mercado" / ("a" * 32 + ".jpg")
+    _mapa_de_mentira(boa)
+    img = Image.open(boa).resize((1366, 900))
+    import random
+    px = img.load()
+    for _ in range(40000):                                         # ruído: arquivo de tamanho de print real
+        px[random.randrange(1366), random.randrange(900)] = tuple(random.randrange(256) for _ in range(3))
+    img.save(boa, quality=95)
+    db.evento(jid, "localizacao", "resultado", "mapa capturado",
+              dados={"imagem": "maps.png", "poligono": [[1, 1], [9, 1], [9, 9]], "pino": [5, 5]})
+    agora = time.time()
+    os.utime(boa, (agora, agora))
+    Image.new("RGB", (1366, 900), (242, 242, 242)).save(pasta / "maps.png")      # o mapa atual ficou em branco
+    Image.new("RGB", (1366, 900), (242, 242, 242)).save(pasta / "mercado/cinza.jpg")
 
     async def executar(job_id, acao, url, timeout=120):
-        if "zapimoveis" not in url:
-            return Captura(bloqueado=True)
-        if acao == "busca":
-            return Captura(ok=True, links=links)
-        if url.endswith("a-1/"):
-            return Captura(ok=True, url_final=url, status=404)
-        if url.endswith("b-2/"):
-            return Captura(ok=True, url_final=url, texto="Oops. Não conseguimos encontrar a página solicitada.")
-        if url.endswith("c-3/"):
-            return Captura(ok=True, url_final="https://www.zapimoveis.com.br/venda/casas/go+goiania/", status=200)
-        return Captura(ok=True, url_final=url, status=200)
-    _setup(monkeypatch, executar)
-    refs = asyncio.run(coletor_fonte.ColetorFonte().buscar(
-        jid, [Consulta(tipologia="Sobrado", bairro="Jardim Vila Boa", cidade="Goiânia")]))
-    assert [r.link for r in refs] == [base + "d-4/"]
-    av = _avisos(jid)
-    for l in links[:3]:
-        assert f"anúncio indisponível: {l}" in av
+        return Captura(ok=True, print_path="mercado/cinza.jpg")
+    monkeypatch.setattr(coletor_hub, "executar", executar)
+    t = Trabalho.model_validate(db.job(jid)["dados"])
+    asyncio.run(coletor_fonte.capturar_maps(jid, t, refazer=True))
+    assert not coletor_fonte._mapa_ruim(pasta / "maps.png")
+    r = db.resultado(jid, "localizacao")
+    assert r["poligono"] == [[1, 1], [9, 1], [9, 9]] and r["restaurado_de"] == f"mercado/{boa.name}"

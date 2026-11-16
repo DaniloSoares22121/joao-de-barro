@@ -8,12 +8,12 @@ import logging
 import websockets
 
 from config import cabecalhos, url_ws
-from navegador import url_permitida
+from navegador import permitida_para
 
 log = logging.getLogger("coletor")
-VERSAO = "1.0.0"
+VERSAO = "1.2.0"
 ESPERAS = (1, 5, 15, 60)
-ACOES = ("busca", "anuncio", "maps")
+ACOES = ("maps",)   # 112: o Coletor só captura o Google Maps
 PAREAR = "pareie novamente"   # status para a bandeja quando o token foi recusado
 
 
@@ -36,7 +36,7 @@ async def _atender(ws, navegador) -> None:
         if not isinstance(msg, dict) or msg.get("tipo") != "tarefa":
             continue
         tid, url, acao = msg.get("id"), str(msg.get("url") or ""), msg.get("acao")
-        if acao not in ACOES or not url_permitida(url):
+        if acao not in ACOES or not permitida_para(acao, url):
             log.warning("tarefa recusada: %s %s", acao, url[:200])
             res = {"ok": False, "bloqueado": False, "erro": "url não permitida"}
         else:

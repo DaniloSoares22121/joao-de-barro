@@ -1,6 +1,7 @@
 /* Testes do controle do avaliador (controle.ts). */
 import {
-  decimalBR, deveNotificar, erroEscolha, erroFonte, formDeDados, novoUploadId, payloadEdicao, rotuloAcao,
+  areaConstruida, br2, decimalBR, deveNotificar, erroEscolha, erroFonte, formDeDados, novoUploadId, payloadEdicao,
+  correcoesDaConfirmacao, ehContraditorio, faltaFotoOuDados, previaValor, quemDispersa, rotuloAcao, unitarioDigitado, unitarioNaBase,
 } from './controle'
 import { STATUS_PARCIAL, STATUS_PRONTO } from './rotulos'
 import { igual, verifica, type Falha } from './testar'
@@ -39,9 +40,21 @@ export function testes(): Falha[] {
   verifica(f, 'unitário fora', erroEscolha(new Set([1, 2]), refs, '3500') !== null)
   verifica(f, 'só referencial sem preço', erroEscolha(new Set([3]), refs, '') !== null)
 
+  const campo = (nome: string, valor: string | number, origem: 'documento' | 'vistoria' | 'inferido') => ({ nome, valor, origem })
+  igual(f, 'área construída documento antes de vistoria', areaConstruida([
+    campo('Área construída (vistoria)', '350,00', 'vistoria'), campo('Área edificada', '364,00 m²', 'documento')]), 364)
+  igual(f, 'área construída número', areaConstruida([campo('area_construida', 198, 'vistoria')]), 198)
+  igual(f, 'área ignora terreno e inferido', areaConstruida([
+    campo('Área construída do lote', 500, 'documento'), campo('Área construída', 120, 'inferido')]), null)
+  igual(f, 'prévia arredonda ao milhar', previaValor(364, 2735.85, 10),
+    { calculado: 995849.4, adotado: 996000, min: 896400, max: 1095600 })
+  igual(f, 'R$/m² digitado', unitarioDigitado('650.000,00', '198,00'), 3282.83)
+  igual(f, 'R$/m² sem área', unitarioDigitado('650.000,00', ''), null)
+  igual(f, 'br2', br2(2735.8), '2.735,80')
+
   igual(f, 'rótulo foto', rotuloAcao({ tipo: 'enviar_arquivo', tipo_arquivo: 'foto' }), 'Enviar fotos')
   igual(f, 'rótulo campo', rotuloAcao({ tipo: 'editar_campo', campo: 'quadra' }), 'Editar quadra')
-  igual(f, 'rótulo coletor', rotuloAcao({ tipo: 'ligar_coletor' }), 'Ligar o Coletor')
+  igual(f, 'rótulo coletor', rotuloAcao({ tipo: 'ligar_coletor' }), 'Ligar o programa do mapa')
 
   const d: DadosTrabalho = {
     id: 'j1', numero: 7, modalidade: 'AMJ', finalidade: 'Judicial', cliente: 'X', tipo: 'Casa', bairro: 'B',
@@ -58,5 +71,34 @@ export function testes(): Falha[] {
   verifica(f, 'notifica ao terminar', deveNotificar('executando', STATUS_PRONTO))
   verifica(f, 'não notifica final→final', !deveNotificar(STATUS_PARCIAL, STATUS_PRONTO))
   verifica(f, 'não notifica na 1ª carga', !deveNotificar(undefined, STATUS_PRONTO))
+  // ORDEM 021: quem espalha a amostra (9118 sem o nº 8) — mesmo texto do servidor
+  const a9118: Array<[number, number, number]> = [[1, 6000000, 2170], [2, 4600000, 1800], [3, 4800000, 1800],
+    [4, 4670000, 2336], [5, 3700000, 1670], [6, 5100000, 1650], [9, 7149000, 2836], [10, 4500000, 1300]]
+  igual(f, 'quem dispersa 9118', quemDispersa(a9118.map(([n, p, a]) => ({ n, u: p / a }))),
+    'Quem mais espalha a amostra: nº 10 (R$ 3.461,54/m², o mais alto): sem ele, 14,1%; '
+    + 'nº 4 (R$ 1.999,14/m², o mais baixo): sem ele, 14,9%')
+  igual(f, 'quem dispersa < 4', quemDispersa([{ n: 1, u: 1 }, { n: 2, u: 2 }, { n: 3, u: 9 }]), '')
+  igual(f, 'anúncio contraditório (D-010)', ehContraditorio({ observacao: 'x; ANÚNCIO CONTRADITÓRIO (D-010): preço' }), true)
+  igual(f, 'anúncio comum', ehContraditorio({ observacao: 'enviado pelo avaliador' }), false)
+  igual(f, 'sem foto: faltam foto/dados', faltaFotoOuDados(ref(1, 1, 1)), true)
+  igual(f, 'com foto e sem "a conferir": completo', faltaFotoOuDados({ ...ref(1, 1, 1), foto: 'mercado/x.jpg' }), false)
+  igual(f, 'com foto mas "a conferir": faltam', faltaFotoOuDados({ ...ref(1, 1, 1), foto: 'm/x.jpg',
+    descricao: 'Padrão e idade a conferir no anúncio.' }), true)
+  igual(f, 'unitário na base terreno', unitarioNaBase({ ...ref(1, 900000, 300), lote_m2: 900 }, 'terreno'), 1000)
+  igual(f, 'unitário na base construída', unitarioNaBase({ ...ref(1, 900000, 300), lote_m2: 900 }, 'construida'), 3000)
+  igual(f, 'terreno sem lote', unitarioNaBase(ref(1, 900000, 300), 'terreno'), null)
+  // ORDEM 028-1: troca de amostra e de base pedem a pergunta; sem troca, nada
+  const sem = correcoesDaConfirmacao({ inicial: [1, 2, 3], marcados: [3, 2, 1], baseAntes: 'construida', baseDepois: 'construida' })
+  igual(f, 'sem troca, sem pergunta', sem.length, 0)
+  const tr = correcoesDaConfirmacao({ inicial: [1, 2, 3, 9, 11, 13, 14], marcados: [1, 6, 10, 11, 14, 15],
+    baseAntes: 'terreno', baseDepois: 'construida' })
+  igual(f, 'troca de amostra', tr[0]?.tipo, 'amostra')
+  igual(f, 'troca de amostra: o que mudou', tr[0]?.depois, 'nº 1, 6, 10, 11, 14, 15 (tirou 2, 3, 9, 13) (pôs 6, 10, 15)')
+  igual(f, 'troca de base', tr[1]?.chave, 'base do cálculo')
+  igual(f, 'base: antes/depois', `${tr[1]?.antes} -> ${tr[1]?.depois}`, 'área total do terreno -> só área construída')
+  const ar = correcoesDaConfirmacao({ inicial: [1], marcados: [1], baseAntes: null, baseDepois: 'construida',
+    areaDoc: { campo: 'IPTU', valor: 6363.65 }, areaEscolhida: { campo: 'Galpão 01', valor: 1982.96 } })
+  igual(f, 'área diferente da de documento', ar.map((x) => x.chave).join(), 'área do imóvel no cálculo')
+
   return f
 }

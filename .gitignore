@@ -7,11 +7,16 @@ build/
 *.spec
 _out/
 .env
-.venv/
-data/
+
+backend/data/
+backend/.venv/
 frontend/dist-joaodebarro/
-*.tsbuildinfo
-# laudos reais de referência (dados de clientes)
-backend/lovable/avaliacao/assets/conhecimento/A1.*
-backend/lovable/avaliacao/assets/conhecimento/A2.*
-backend/lovable/avaliacao/assets/conhecimento/P8.*
+
+# laudos reais (dados de cliente) - nunca publicar
+backend/lovable/avaliacao/assets/conhecimento/A1.txt
+backend/lovable/avaliacao/assets/conhecimento/P8.txt
+
+# ORDEM 071-E: material de treino e cópias com dado de cliente nunca entram no git
+jdb-treino/
+_backup_*/
+_lixeira_*/

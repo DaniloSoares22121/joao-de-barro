@@ -4,13 +4,10 @@ SECOES_OV = {
     "1": "A finalidade do presente parecer é a determinação do valor de mercado do imóvel "
          "avaliando para fins de comercialização, na data-base de 16/10/2026, para subsidiar "
          "negociação de venda entre particulares.",
-    "5": "Foi adotado o Método Comparativo Direto de Dados de Mercado, no qual o valor do imóvel "
-         "é determinado a partir de ofertas de imóveis semelhantes – sobrados residenciais de "
-         "padrão construtivo simples e construção antiga – localizados na mesma região de "
-         "influência mercadológica. Calculou-se o valor unitário de cada referencial (preço ÷ "
-         "área construída), a média e o intervalo da amostra, e aplicou-se à área do imóvel "
-         "avaliando o valor unitário adotado, com declaração da faixa de variação admitida. Não "
-         "foram aplicados fatores de homogeneização, desconto de oferta ou depreciação.",
+    # ORDEM 002 (D-039): na OV a seção 5 é só o trecho dos referenciais (até 160 caracteres),
+    # encaixado na frase fixa da metodologia do P1-OV — antes vinha o parágrafo inteiro
+    "5": "sobrados residenciais de padrão construtivo simples e construção antiga, localizados "
+         "na mesma região de influência mercadológica",
     "7.1": "O imóvel avaliando localiza-se na Rua das Acácias, Quadra 12, Lote 07, Jardim "
            "Vila Boa, município de Goiânia/GO, CEP 74360-300, em posição de contra-esquina.\n\n"
            "Trata-se de sobrado residencial de padrão construtivo simples, inserido em trecho "

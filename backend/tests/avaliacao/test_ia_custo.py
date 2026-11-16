@@ -80,9 +80,14 @@ def test_limite_excedido_no_pipeline_vira_parcial(monkeypatch):
     jid = T._job()
     for _ in range(ia.MAX_CHAMADAS_PADRAO):
         db.registrar_ia(jid, "triagem", "m", 1, 1, None, 1)
-    assert T._rodar(jid) == orquestrador.PARCIAL
+    # 165: falha técnica (inclusive o limite de IA) termina em ERRO TÉCNICO, com a frase simples na pendência e o
+    # detalhe ("limite de IA do trabalho") no registro; o [Tentar de novo] reabre com cota nova (teste abaixo)
+    assert T._rodar(jid) == orquestrador.ERRO_TECNICO
     pend = [p["texto"] for p in db.resultado(jid, "entrega")["pendencias"]]
-    assert any(ia.LIMITE_JOB in p for p in pend), pend
+    assert any("limite de uso da ia" in p.lower() for p in pend), pend
+    with db._conn() as c:
+        det = [r[0] or "" for r in c.execute("SELECT dados_json FROM av_events WHERE job=? AND nivel='erro'", (jid,))]
+    assert any(ia.LIMITE_JOB in d for d in det), det
 
 
 def test_detalhe_do_trabalho_traz_resumo_ia(client, dono):
@@ -137,28 +142,6 @@ def test_limite_atomico_com_chamadas_em_paralelo(monkeypatch):
         db.set_setting("ia_max_chamadas", str(ia.MAX_CHAMADAS_PADRAO))
 
 
-def test_limite_na_leitura_paralela_de_anuncios_propaga(monkeypatch):
-    from lovable.avaliacao import coletor_fonte, coletor_hub
-    from lovable.avaliacao.agentes import leitor_anuncio
-    from lovable.avaliacao.coletor_hub import Captura
-    from lovable.avaliacao.fonte_mercado import Consulta
-    zap = "https://www.zapimoveis.com.br/imovel/"
+# 165: saiu "test_limite_na_leitura_paralela_de_anuncios_propaga" — testava a leitura paralela de anúncios que o
+# Coletor buscava sozinho nos portais; a busca automática saiu do sistema (D-117) e o código testado não existe mais.
 
-    async def executar(job_id, acao, url, timeout=120):
-        if "zapimoveis" not in url:
-            return Captura(bloqueado=True)
-        if acao == "busca":
-            return Captura(ok=True, links=[f"{zap}l-{i}/" for i in range(3)])
-        return Captura(ok=True, url_final=url, texto="t")
-
-    async def ler(job_id, cap, portal, comuns=frozenset()):
-        raise ia.IAFalhou(ia.LIMITE_JOB)
-
-    async def sleep(s):
-        pass
-    monkeypatch.setattr(coletor_fonte, "_sleep", sleep)
-    monkeypatch.setattr(coletor_hub, "executar", executar)
-    monkeypatch.setattr(leitor_anuncio, "ler", ler)
-    with pytest.raises(ia.IAFalhou, match=ia.LIMITE_JOB):
-        asyncio.run(coletor_fonte.ColetorFonte().buscar(
-            T._job(), [Consulta(tipologia="Sobrado", bairro="Bairro Lim", cidade="Goiânia")]))

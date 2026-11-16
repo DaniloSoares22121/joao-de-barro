@@ -1,305 +1,28 @@
-"""Fonte de mercado real: dirige o Coletor nos portais e lê os anúncios com a IA.
+"""O Coletor (programa no PC do avaliador) hoje só captura o Google Maps da localização do lote.
 
-Limites por trabalho (Global Constraints): pausa aleatória 4–9 s entre páginas, máx. 40
-páginas e 20 anúncios abertos. Captcha/bloqueio -> portal marcado como bloqueado naquele
-trabalho (sem burla), aviso e segue nos outros.
-
-Banco de comparáveis (av_anuncios): todo anúncio lido é gravado; antes de abrir portais, os
-anúncios do mesmo bairro/tipologia/faixa de área vistos há ≤ 30 dias são reaproveitados e o
-limite de anúncios abertos só completa o que faltar.
+ORDEM 112 (pedido do Capitão): a busca automática nos portais (desligada desde a D-117) saiu — os anúncios chegam
+pela extensão "Enviar ao JdB". Fica a captura do mapa (e o "Refazer mapa"), que precisa do Coletor ligado.
 """
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import random
-import shutil
-from datetime import datetime, timedelta, timezone
+import sys
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from lovable import config
-
-from . import coletor_hub, db, ia, portais
-from .agentes import leitor_anuncio
-from .agentes.pesquisa import link_limpo
-from .fonte_mercado import Consulta
-from .modelos import Referencial, Trabalho
+from . import coletor_hub, db, ia
+from .modelos import Trabalho
 
 log = logging.getLogger("lovable")
 
-_sleep = asyncio.sleep           # injetável nos testes
-PAUSA_S = (4.0, 9.0)
-MAX_PAGINAS = 40
-MAX_ANUNCIOS = 20               # abertos + reaproveitados do banco, por trabalho
-LEITURAS_PARALELAS = 3
-CACHE_DIAS = 30
-
-
-class _Estado:
-    def __init__(self):
-        self.paginas = 0
-        self.anuncios = 0
-        self.reusados = 0
-        self.bloqueados: set[str] = set()
-        self.vistos: set[str] = set()
-
-
-# ------------------------------------------------------------------ banco de comparáveis
-def bairro_norm(b: str | None) -> str:
-    return portais.slug(b or "")
-
-
-def tipo_norm(t: str | None) -> str:
-    """1ª palavra da tipologia ("Sobrado residencial" -> "sobrado")."""
-    return portais.slug(t or "").split("-")[0]
-
-
-def impressao_digital(bairro: str, area_m2: float | None, preco: float | None,
-                      quartos: int | None) -> str:
-    """hash(bairro_norm, área arredondada, preço ao milhar, quartos): o mesmo imóvel
-    anunciado em portais diferentes. '' sem área, preço ou quartos (sem quartos a
-    impressão junta imóveis diferentes demais)."""
-    if not area_m2 or not preco or quartos is None:
-        return ""
-    base = f"{bairro_norm(bairro)}|{round(area_m2)}|{int(round(preco, -3))}|{quartos}"
-    return hashlib.sha1(base.encode()).hexdigest()[:20]
-
-
-def _cidades(cidade: str | None) -> list[str] | None:
-    """Grafias aceitas no banco: slug (atual) e texto cru (linhas antigas)."""
-    if not (cidade or "").strip():
-        return None
-    return sorted({portais.slug(cidade), cidade.strip()})
-
-
-def _raiz() -> Path:
-    return config.DATA_DIR / "avaliacao"
-
-
-def gravar_anuncio(job_id: str, r: Referencial, c: Consulta | None = None) -> None:
-    """Grava/atualiza o anúncio lido. Foto e print ficam como <job>/<caminho> (relativos a
-    DATA_DIR/avaliacao) para outro trabalho poder copiá-los."""
-    db.salvar_anuncio({
-        "url_limpa": link_limpo(r.link), "portal": r.portal, "bairro_norm": bairro_norm(r.bairro),
-        "cidade": portais.slug(c.cidade if c else ""), "tipologia": tipo_norm(r.tipologia),
-        "quartos": r.quartos, "suites": r.suites, "area_m2": r.area_m2, "lote_m2": r.lote_m2,
-        "preco": r.preco, "padrao": r.padrao, "idade_aparente": r.idade_aparente,
-        "descricao": r.descricao, "foto_path": _rel_mercado(job_id, r.foto),
-        "print_path": _rel_mercado(job_id, r.print_),
-        "publicado_em": r.publicado_em or None, "bairro": r.bairro,
-        "tipologia_txt": r.tipologia,
-        "impressao_digital": impressao_digital(r.bairro, r.area_m2, r.preco, r.quartos)})
-
-
-_EXT_IMAGEM = {".jpg", ".jpeg", ".png"}
-
-
-def _imagem_de_mercado(job_id: str, rel: str) -> Path | None:
-    """<pasta do job>/<rel> resolvido, se for imagem (.jpg/.jpeg/.png) dentro de
-    <job>/mercado/ (onde o coletor grava as capturas); senão None."""
-    if not rel or not job_id or "/" in job_id or "\\" in job_id or job_id in (".", ".."):
-        return None
-    base = (_raiz() / job_id / "mercado").resolve()
-    alvo = (_raiz() / job_id / rel).resolve()
-    if not alvo.is_relative_to(base) or alvo == base or alvo.suffix.lower() not in _EXT_IMAGEM:
-        return None
-    return alvo
-
-
-def _rel_mercado(job_id: str, rel: str) -> str:
-    """'<job>/mercado/...' para gravar no banco, ou '' se o caminho não for uma captura."""
-    alvo = _imagem_de_mercado(job_id, rel)
-    if alvo is None:
-        return ""
-    return f"{job_id}/{alvo.relative_to((_raiz() / job_id).resolve()).as_posix()}"
-
-
-def _copiar(job_id: str, origem: str, id_anuncio: int) -> str:
-    """Copia <job_origem>/mercado/<imagem> para <job>/anuncios/; devolve o caminho relativo
-    ao job ('' se o arquivo sumiu ou não é uma captura do coletor: nunca copia documentos)."""
-    if not origem:
-        return ""
-    dono, _, rel = origem.replace("\\", "/").partition("/")
-    src = _imagem_de_mercado(dono, rel)
-    if src is None or not src.is_file():
-        return ""
-    if dono == job_id:
-        return src.relative_to((_raiz() / job_id).resolve()).as_posix()
-    destino = Path("anuncios") / f"{id_anuncio}_{src.name}"
-    alvo = db.pasta(job_id) / destino
-    alvo.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, alvo)
-    return destino.as_posix()
-
-
-def _referencial_do_banco(job_id: str, a: dict) -> Referencial:
-    return Referencial(
-        n=0, link=a["url_limpa"], portal=a["portal"], bairro=a.get("bairro") or a["bairro_norm"],
-        tipologia=a.get("tipologia_txt") or a["tipologia"], quartos=a["quartos"],
-        suites=a["suites"], lote_m2=a["lote_m2"], area_m2=a["area_m2"], preco=a["preco"],
-        padrao=a["padrao"], idade_aparente=a["idade_aparente"], descricao=a["descricao"],
-        foto=_copiar(job_id, a["foto_path"], a["id"]),
-        print_=_copiar(job_id, a["print_path"], a["id"]), publicado_em=a["publicado_em"] or "",
-        fonte_coleta="banco", visto_em=a.get("visto_em") or "")
-
 
 class ColetorFonte:
-    def __init__(self):
-        self._estado: dict[str, _Estado] = {}
+    """A fonte registrada no fonte_mercado: diz se o Coletor está ligado e captura o mapa."""
 
     def online(self) -> bool:
         return coletor_hub.online()
-
-    def _st(self, job_id: str) -> _Estado:
-        return self._estado.setdefault(job_id, _Estado())
-
-    async def _pagina(self, job_id: str, st: _Estado, acao: str, url: str):
-        if st.paginas >= MAX_PAGINAS:
-            return None
-        if st.paginas:
-            await _sleep(random.uniform(*PAUSA_S))
-        st.paginas += 1
-        return await coletor_hub.executar(job_id, acao, url)
-
-    def _bloquear(self, job_id: str, st: _Estado, chave: str) -> None:
-        if chave not in st.bloqueados:
-            st.bloqueados.add(chave)
-            db.evento(job_id, "pesquisa", "aviso", f"portal bloqueado: {portais.PORTAIS[chave].nome}")
-
-    def encerrar(self, job_id: str) -> None:
-        """Fim da pesquisa (ou queda do coletor): os limites do trabalho recomeçam do zero."""
-        self._estado.pop(job_id, None)
-
-    @staticmethod
-    def _portais(c: Consulta) -> list[str]:
-        if not c.portal:
-            return list(portais.PORTAIS)
-        alvo = portais.slug(c.portal).replace("-", "")
-        achados = [k for k, p in portais.PORTAIS.items()
-                   if alvo in (k, portais.slug(p.nome).replace("-", ""), portais.slug(p.nome).split("-")[0])]
-        return achados or list(portais.PORTAIS)
-
-    async def buscar(self, job_id: str, consultas: list[Consulta]) -> list[Referencial]:
-        """ColetorOffline propaga (o orquestrador espera o coletor e refaz a pesquisa)."""
-        try:
-            return await self._buscar(job_id, consultas)
-        except coletor_hub.ColetorOffline:
-            self.encerrar(job_id)
-            raise
-
-    def _cheio(self, st: _Estado) -> bool:
-        return st.anuncios + st.reusados >= MAX_ANUNCIOS
-
-    def _do_banco(self, job_id: str, st: _Estado, c: Consulta) -> list[Referencial]:
-        """Anúncios do mesmo bairro/tipologia/faixa de área vistos há ≤ CACHE_DIAS: entram
-        sem abrir o portal de novo (foto e print copiados para a pasta do job)."""
-        desde = (datetime.now(timezone.utc) - timedelta(days=CACHE_DIAS)).isoformat()
-        out = []
-        for a in db.anuncios_recentes(bairro_norm(c.bairro), tipo_norm(c.tipologia), desde,
-                                      c.area_min, c.area_max,
-                                      cidade=_cidades(c.cidade)):
-            if self._cheio(st) or a["url_limpa"] in st.vistos:
-                continue
-            st.vistos.add(a["url_limpa"])
-            st.reusados += 1
-            out.append(_referencial_do_banco(job_id, a))
-        if out:
-            db.evento(job_id, "pesquisa", "info",
-                      f"{len(out)} anúncio(s) reaproveitado(s) do banco de comparáveis "
-                      f"({c.bairro}, {c.tipologia})")
-        return out
-
-    async def _buscar(self, job_id: str, consultas: list[Consulta]) -> list[Referencial]:
-        """Captura todos os anúncios (em série, com as pausas) e depois lê em paralelo."""
-        st = self._st(job_id)
-        refs: list[Referencial] = []
-        capturados: list[tuple] = []
-        await self._capturar(job_id, st, consultas, refs, capturados)
-        return refs + await self._ler_todos(job_id, capturados)
-
-    async def _capturar(self, job_id: str, st: _Estado, consultas: list[Consulta],
-                        refs: list[Referencial], capturados: list[tuple]) -> None:
-        for c in consultas:
-            refs += self._do_banco(job_id, st, c)
-            for chave in self._portais(c):
-                if chave in st.bloqueados or self._cheio(st):
-                    continue
-                p = portais.PORTAIS[chave]
-                cap = await self._pagina(job_id, st, "busca", p.url_busca(c))
-                if cap is None:
-                    return
-                if cap.bloqueado:
-                    self._bloquear(job_id, st, chave)
-                    continue
-                if not cap.ok:
-                    db.evento(job_id, "pesquisa", "aviso", f"busca falhou em {p.nome}: {cap.erro or '?'}")
-                    continue
-                if sem_resultados(cap):
-                    db.evento(job_id, "pesquisa", "aviso", f"busca sem resultados: {p.nome}")
-                    continue
-                for link in [str(x) for x in cap.links if p.eh_anuncio(str(x))]:
-                    if self._cheio(st) or chave in st.bloqueados:
-                        break
-                    if link in st.vistos or link_limpo(link) in st.vistos:
-                        continue
-                    st.vistos.add(link)
-                    st.vistos.add(link_limpo(link))
-                    an = await self._pagina(job_id, st, "anuncio", link)
-                    if an is None:
-                        return
-                    st.anuncios += 1
-                    if an.bloqueado:
-                        self._bloquear(job_id, st, chave)
-                        break
-                    if not an.ok:
-                        # captura falhou (timeout, url recusada): sem isto ela seguia para a
-                        # leitura, era descartada calada e a pesquisa terminava em
-                        # "0 candidatos" sem nenhuma explicação
-                        db.evento(job_id, "pesquisa", "aviso",
-                                  f"anúncio não capturado ({an.erro or 'erro'}): {link}")
-                        continue
-                    if (sem_resultados(an) or (an.status is not None and an.status != 200)
-                            or (an.url_final and not p.eh_anuncio(str(an.url_final)))):
-                        db.evento(job_id, "pesquisa", "aviso", f"anúncio indisponível: {link}")
-                        continue
-                    capturados.append((an, link, p.nome, c))
-
-    async def _ler_todos(self, job_id: str, capturados: list[tuple]) -> list[Referencial]:
-        """Lê os anúncios capturados em paralelo (no máx. LEITURAS_PARALELAS) e grava cada
-        um no banco de comparáveis."""
-        if not capturados:
-            return []
-        sem = asyncio.Semaphore(LEITURAS_PARALELAS)
-        comuns = leitor_anuncio.linhas_comuns([an.texto or "" for an, *_ in capturados])
-
-        async def um(an, link, portal, c):
-            async with sem:
-                try:
-                    return await leitor_anuncio.ler(job_id, an, portal, comuns=comuns)
-                except ia.IAFalhou as e:
-                    if ia.LIMITE_JOB in str(e):   # limite do trabalho: a pesquisa para (PARCIAL)
-                        raise
-                    db.evento(job_id, "pesquisa", "aviso", f"anúncio não lido ({link}): {e}")
-                    return None
-
-        lidos = await asyncio.gather(*(um(*x) for x in capturados))
-        refs = []
-        for (an, link, portal, c), r in zip(capturados, lidos):
-            if r is None:
-                continue
-            upd = {"link": an.url_final or link, "portal": portal}
-            if an.foto_path:
-                upd["foto"] = an.foto_path
-            r = r.model_copy(update=upd)
-            try:
-                gravar_anuncio(job_id, r, c)
-            except Exception as e:  # o banco é otimização: nunca derruba a pesquisa
-                log.warning("av_anuncios: falha ao gravar %s: %s", r.link, e)
-            refs.append(r)
-        return refs
 
     async def capturar_maps(self, job_id: str, t: Trabalho) -> None:
         await capturar_maps(job_id, t)
@@ -318,20 +41,6 @@ class _Poligono(BaseModel):
     poligono: list[list[float]] = []
 
 
-# Páginas de "não encontrado"/sem resultados dos portais ainda trazem anúncios de vitrine
-# (ex.: ZAP "Oops… Não conseguimos encontrar a página solicitada", links ?source=showcase).
-_SEM_RESULTADOS = ("não conseguimos encontrar a página", "nao conseguimos encontrar a pagina",
-                   "não encontramos resultados", "nenhum resultado encontrado",
-                   "nenhum imóvel encontrado")
-
-
-def sem_resultados(cap) -> bool:
-    if cap.status is not None and cap.status >= 400:
-        return True
-    t = (cap.texto or "")[:5000].lower()
-    return any(m in t for m in _SEM_RESULTADOS)
-
-
 def sanear(pol: list, largura: int, altura: int) -> list[list[int]]:
     out = []
     for p in pol[:12]:
@@ -347,34 +56,393 @@ def sanear(pol: list, largura: int, altura: int) -> list[list[int]]:
     return out if len(out) >= 3 else []
 
 
-async def capturar_maps(job_id: str, t: Trabalho) -> None:
-    """Retomável (pula se já houver resultado de localização) e seguro com o Coletor offline."""
-    if db.resultado(job_id, "localizacao") is not None or not t.pin_maps:
+async def capturar_maps(job_id: str, t: Trabalho, refazer: bool = False) -> None:
+    """Retomável (pula se já houver resultado de localização) e seguro com o Coletor offline.
+    `refazer` (ORDEM 033-1, "Refazer mapa"): captura de novo mesmo com resultado anterior."""
+    if (db.resultado(job_id, "localizacao") is not None and not refazer) or not t.pin_maps:
         return
     from PIL import Image
-    try:
-        cap = await coletor_hub.executar(job_id, "maps", t.pin_maps)
-    except coletor_hub.ColetorOffline as e:
-        db.evento(job_id, "localizacao", "aviso", f"mapa não capturado (coletor offline): {e}")
-        return
-    if not cap.ok or not cap.print_path:
-        db.evento(job_id, "localizacao", "aviso", f"mapa não capturado: {cap.erro or 'sem imagem'}")
-        return
+    url, pin_ll = (await asyncio.to_thread(url_do_mapa, t.pin_maps) if RESOLVER_PINO   # 117: zoom 19 no pino
+                   else (t.pin_maps, None))
     pasta = db.pasta(job_id)
-    try:
-        with Image.open(pasta / cap.print_path) as im:
-            rgb = im.convert("RGB")
-        rgb.save(pasta / "maps.png")
-        largura, altura = rgb.size
-    except Exception as e:
-        db.evento(job_id, "localizacao", "aviso", f"mapa inválido: {e}")
+    # 121: o print em branco (o Maps ainda não tinha desenhado) NUNCA substitui o mapa bom: tenta de novo, depois com
+    # o link original do avaliador; nada deu certo -> fica o maps.png e o resultado de antes, com um aviso
+    # 132-7: a 2ª tentativa é o mapa sem o painel do lugar ("@lat,lng,19z"), que desenha mais leve; nele o pino não
+    # aparece, mas o centro da tela É o ponto do pino (âncora do desenho do lote)
+    so_mapa = (f"https://www.google.com/maps/@{pin_ll[0]},{pin_ll[1]},{ZOOM_MAPA}z/data=!3m1!1e3" if pin_ll else url)
+    tentativas = [url, so_mapa] + ([t.pin_maps] if url != t.pin_maps else [])
+    ancora_centro = False
+    rgb = None
+    for k, u in enumerate(tentativas):
+        try:
+            cap = await coletor_hub.executar(job_id, "maps", u)
+        except coletor_hub.ColetorOffline as e:
+            db.evento(job_id, "localizacao", "aviso", f"mapa não capturado (coletor offline): {e}")
+            return
+        if not cap.ok or not cap.print_path:
+            db.evento(job_id, "localizacao", "aviso", f"mapa não capturado: {cap.erro or 'sem imagem'}")
+            continue
+        try:
+            with Image.open(pasta / cap.print_path) as im:
+                novo = im.convert("RGB")
+        except Exception as e:
+            db.evento(job_id, "localizacao", "aviso", f"mapa inválido: {e}")
+            continue
+        if _mapa_ruim(pasta / cap.print_path):
+            db.evento(job_id, "localizacao", "aviso", "o Google Maps devolveu a tela em branco (o mapa não tinha "
+                      "desenhado); " + ("tentando de novo" if k + 1 < len(tentativas) else "fica o mapa de antes"))
+            continue
+        rgb = novo
+        if u == t.pin_maps and u != url:
+            pin_ll = None                     # o link original não está no zoom 19: a demarcação segue como era
+        ancora_centro = u == so_mapa and u != url
+        break
+    if rgb is None:
+        atual = pasta / "maps.png"
+        if not atual.is_file() or _mapa_ruim(atual):
+            restaurar_ultimo_bom(job_id)      # 125-2: o mapa de agora também é ruim -> volta o último bom capturado
         return
+    rgb.save(pasta / "maps.png")
+    largura, altura = rgb.size
+    pol, pino, fonte = None, None, ""
+    if pin_ll is not None:                    # 117 (D-130): o contorno é o do LOTE da Prefeitura, sobre o lote
+        try:
+            pol, pino = await asyncio.to_thread(lote_da_prefeitura_no_mapa, job_id, pasta / "maps.png", pin_ll,
+                                                ancora_centro)
+            fonte = "mapa_digital" if pol else ""
+        except Exception as e:                # noqa: BLE001 — sem a Prefeitura, segue a demarcação de antes
+            log.warning("lote da Prefeitura no mapa (%s): %s", job_id, e)
+    if not pol:
+        pol, pino = await demarcar_lote(job_id, pasta / "maps.png")
+        fonte = "pino_ou_ia"
+    db.evento(job_id, "localizacao", "resultado", "mapa capturado"
+              + (" (lote da Prefeitura sobre o lote)" if fonte == "mapa_digital" else ""),
+              dados={"imagem": "maps.png", "poligono": pol, "pino": pino, "fonte_poligono": fonte,
+                     "zoom": ZOOM_MAPA if pin_ll is not None else None})
+
+
+# ------------------------------------------------------------------ 117 (D-130): o lote certo, com contorno fino
+def em_branco(im) -> bool:
+    """O print sem mapa (cinza liso, o Maps não desenhou): quase nenhuma variação de tom."""
+    from PIL import ImageStat
+    pequeno = im.convert("L").resize((200, 132))
+    return ImageStat.Stat(pequeno).stddev[0] < 12
+
+
+MIN_BYTES_POR_PIXEL = 0.02  # 125-2: print de satélite ~0,3 byte/pixel (400 KB); o cinza vazio ~0,006 (5–8 KB)
+
+
+def _mapa_ruim(arq: Path) -> bool:
+    from PIL import Image
     try:
-        r = await ia.perguntar(INSTRUCAO_MAPA, "Demarque o lote do pino.", _Poligono,
-                               arquivos=[pasta / "maps.png"], cwd=pasta)
-        pol = sanear(r.poligono, largura, altura)
+        with Image.open(arq) as im:
+            return em_branco(im) or arq.stat().st_size < MIN_BYTES_POR_PIXEL * im.width * im.height
+    except Exception:                         # noqa: BLE001
+        return True
+
+
+def restaurar_ultimo_bom(job_id: str) -> bool:
+    """125-2: o maps.png ficou em branco (captura antiga) e a nova falhou: volta a última captura BOA do Google Maps
+    do próprio trabalho (o print guardado em mercado/ na hora de um "mapa capturado"), com a demarcação daquela vez.
+    É o sistema que restaura — nada à mão. Não há captura boa: False (o laudo sai sem localização, com aviso)."""
+    import json
+    from datetime import datetime
+    pasta = db.pasta(job_id)
+    with db._conn() as c:
+        evs = c.execute("SELECT ts, dados_json FROM av_events WHERE job=? AND etapa='localizacao' AND nivel='resultado' "
+                        "ORDER BY id DESC", (job_id,)).fetchall()
+    capturas = [f for f in (pasta / "mercado").glob("*") if f.is_file() and not f.name.startswith(("enviado", "galeria"))
+                and f.suffix.lower() in (".jpg", ".jpeg", ".png") and len(f.stem) >= 24]
+    for ts, dj in evs:
+        try:
+            quando = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+            dados = json.loads(dj or "{}")
+        except ValueError:
+            continue
+        perto = sorted((abs(f.stat().st_mtime - quando), f) for f in capturas if abs(f.stat().st_mtime - quando) <= 120)
+        for _, f in perto:
+            if _mapa_ruim(f):
+                continue
+            from PIL import Image
+            with Image.open(f) as im:
+                im.convert("RGB").save(pasta / "maps.png")
+            db.evento(job_id, "localizacao", "resultado", "mapa restaurado (a última captura boa do Google Maps; a "
+                      "nova saiu em branco)", dados={**dados, "imagem": "maps.png", "restaurado_de": f"mercado/{f.name}"})
+            return True
+    db.evento(job_id, "localizacao", "aviso", "mapa da localização em branco e sem captura boa guardada: refaça o mapa")
+    return False
+
+
+RESOLVER_PINO = "pytest" not in sys.modules   # nos testes automáticos não vai ao Google
+ZOOM_MAPA = 19          # ~0,29 m por pixel em Goiânia: um lote de 12 × 25 m tem ~40 × 85 px (antes ~10 × 22 px)
+
+
+def url_do_mapa(pin: str) -> tuple[str, tuple[float, float] | None]:
+    """O link do pino (curto ou longo) -> (link do satélite com zoom 19 no pino, (lat, lng) do pino). Sem resolver:
+    o link de antes e None (a demarcação segue como era)."""
+    import re as _re
+
+    import httpx
+    try:
+        final = str(httpx.get(pin, follow_redirects=True, timeout=20, headers={"User-Agent": "Mozilla/5.0"}).url)
+    except Exception:                         # noqa: BLE001
+        return pin, None
+    m = (_re.search(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", final) or _re.search(r"/place/(-?\d+\.\d+),(-?\d+\.\d+)", final)
+         or _re.search(r"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)", final))
+    if not m:
+        return pin, None
+    lat, lng = float(m.group(1)), float(m.group(2))
+    return f"https://www.google.com/maps/place/{lat},{lng}/@{lat},{lng},{ZOOM_MAPA}z/data=!3m1!1e3", (lat, lng)
+
+
+def utm_para_latlon(x: float, y: float, zona: int = 22, sul: bool = True) -> tuple[float, float]:
+    """SIRGAS 2000 / UTM (EPSG 31982 = zona 22 Sul, a do Mapa Digital Fácil) -> (lat, lng) em graus."""
+    import math
+    a, f, k0 = 6378137.0, 1 / 298.257222101, 0.9996
+    e2 = f * (2 - f)
+    ep2 = e2 / (1 - e2)
+    x -= 500000.0
+    if sul:
+        y -= 10000000.0
+    mu = (y / k0) / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256))
+    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+    p1 = (mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * math.sin(2 * mu) + (21 * e1 ** 2 / 16 - 55 * e1 ** 4 / 32) * math.sin(4 * mu)
+          + (151 * e1 ** 3 / 96) * math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * math.sin(8 * mu))
+    n1 = a / math.sqrt(1 - e2 * math.sin(p1) ** 2)
+    t1, c1 = math.tan(p1) ** 2, ep2 * math.cos(p1) ** 2
+    r1 = a * (1 - e2) / (1 - e2 * math.sin(p1) ** 2) ** 1.5
+    d = x / (n1 * k0)
+    lat = p1 - (n1 * math.tan(p1) / r1) * (d ** 2 / 2 - (5 + 3 * t1 + 10 * c1 - 4 * c1 ** 2 - 9 * ep2) * d ** 4 / 24
+                                          + (61 + 90 * t1 + 298 * c1 + 45 * t1 ** 2 - 252 * ep2 - 3 * c1 ** 2) * d ** 6 / 720)
+    lon = (d - (1 + 2 * t1 + c1) * d ** 3 / 6
+           + (5 - 2 * c1 + 28 * t1 - 3 * c1 ** 2 + 8 * ep2 + 24 * t1 ** 2) * d ** 5 / 120) / math.cos(p1)
+    return math.degrees(lat), math.degrees(math.radians(-183 + 6 * zona) + lon)
+
+
+def projetar(anel_utm: list, pin_ll: tuple[float, float], pino_px, zoom: int = ZOOM_MAPA) -> list[list[int]]:
+    """O lote (UTM) em pixels do print do Google Maps, ancorado no pino: Web Mercator, 256 px por tile no zoom 0."""
+    import math
+    res = 2 * math.pi * 6378137.0 / (256 * 2 ** zoom)            # metros de Mercator por pixel
+
+    def merc(lat, lng):
+        return math.radians(lng) * 6378137.0, math.log(math.tan(math.pi / 4 + math.radians(lat) / 2)) * 6378137.0
+    px0, py0 = merc(*pin_ll)
+    out = []
+    for x, y in anel_utm:
+        mx, my = merc(*utm_para_latlon(x, y))
+        out.append([int(round(pino_px[0] + (mx - px0) / res)), int(round(pino_px[1] - (my - py0) / res))])
+    return out
+
+
+def lote_da_prefeitura_no_mapa(job_id: str, mapa: Path, pin_ll, ancora_centro: bool = False) -> tuple[list | None, list | None]:
+    """Goiânia: o desenho do lote do Mapa Digital Fácil posto sobre o print (pino como âncora). Fora de Goiânia, sem
+    inscrição, sem pino no print ou lote fora da imagem: (None, pino)."""
+    from PIL import Image
+
+    from . import imagens, mapa_digital
+    with Image.open(mapa) as im:
+        rgb = im.convert("RGB")
+    pino = imagens._pino(rgb, imagens._fim_painel(rgb))
+    if not pino and ancora_centro:            # 132-7: mapa sem painel e sem marcador: o centro da tela é o ponto do pino
+        pino = (rgb.size[0] // 2, rgb.size[1] // 2)
+    insc = mapa_digital._inscricao(job_id)
+    cidade = (db.job(job_id)["dados"].get("cidade") or "").strip().lower()
+    if not pino or not insc or cidade not in ("goiânia", "goiania"):
+        return None, list(pino) if pino else None
+    anel = mapa_digital.dados_lote(insc)["anel"]
+    pol = projetar(anel, pin_ll, pino)
+    w, h = rgb.size
+    if len(pol) < 3 or not all(0 <= x < w and 0 <= y < h for x, y in pol):
+        return None, list(pino)
+    return pol, list(pino)
+
+
+def _dentro(pt, pol) -> bool:
+    """Ponto no polígono (ray casting)."""
+    x, y = pt
+    dentro = False
+    for i in range(len(pol)):
+        (x1, y1), (x2, y2) = pol[i], pol[i - 1]
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / ((y2 - y1) or 1e-9) + x1:
+            dentro = not dentro
+    return dentro
+
+
+LADO_LOTE_PX = 70   # quadrado de reserva em volta do pino (print do Maps a ~19z)
+
+
+MAX_TENTATIVAS_MAPA = 2
+
+
+LADO_GALPAO_PX = 220   # ORDEM 034-5: galpão/comercial ocupa muito mais que um lote residencial
+
+
+def lado_lote(job_id: str) -> int:
+    """Tamanho típico do lote no print, pelo tipo do imóvel (galpão não é lote residencial)."""
+    try:
+        from .agentes import _comum
+        tipo = (_comum.trabalho(job_id).tipo or "").casefold()
+    except Exception:
+        tipo = ""
+    grande = ("galp", "industr", "armaz", "depósito", "deposito", "logíst", "logist", "comercial", "barrac")
+    return LADO_GALPAO_PX if any(k in tipo for k in grande) else LADO_LOTE_PX
+
+
+def quadrado_no_pino(pino, lado: int = LADO_LOTE_PX) -> list[list[int]]:
+    x, y = pino
+    m = lado // 2
+    return [[x - m, y - m], [x + m, y - m], [x + m, y + m], [x - m, y + m]]
+
+
+async def demarcar_lote(job_id: str, mapa: Path) -> tuple[list, list | None]:
+    """O pino é do avaliador e manda (P6, erro 6): a IA recebe a posição da ponta do pino e
+    o polígono tem de contê-la; se não contiver (ou a IA falhar), quadrado em volta do pino."""
+    from PIL import Image
+
+    from . import imagens
+    with Image.open(mapa) as im:
+        rgb = im.convert("RGB")
+    largura, altura = rgb.size
+    pino = imagens._pino(rgb, imagens._fim_painel(rgb))
+    lado = lado_lote(job_id)
+    galpao = lado > LADO_LOTE_PX
+    instr = INSTRUCAO_MAPA
+    if pino:
+        instr += (f"\nA PONTA do pino vermelho está em x={pino[0]}, y={pino[1]}. O lote "
+                  "demarcado é o que CONTÉM esse ponto (o pino fica dentro do polígono), não o "
+                  "lote ou galpão vizinho. "
+                  + (f"O imóvel é um GALPÃO/imóvel comercial: contorne o galpão e o pátio do lote "
+                     f"do pino (da ordem de {lado}×{lado} px); nunca o quarteirão inteiro nem o "
+                     "galpão vizinho." if galpao else
+                     "Um lote residencial urbano é PEQUENO no print (da "
+                     f"ordem de {LADO_LOTE_PX}×{LADO_LOTE_PX} px): nunca contorne um quarteirão, "
+                     "galpão ou supermercado inteiro."))
+    dica = _dica_imovel(job_id)
+    if dica:
+        instr += "\nO imóvel avaliando: " + dica
+    # ORDEM 009 (corte 5 de custo): no máximo MAX_TENTATIVAS_MAPA chamadas de IA por trabalho;
+    # depois, direto o plano B (telhado junto ao pino ou quadrado no pino)
+    with db._conn() as c:
+        feitas = c.execute("SELECT COUNT(*) FROM av_ia_chamadas WHERE job=? AND etapa='localizacao'",
+                           (job_id,)).fetchone()[0]
+    try:
+        if feitas >= MAX_TENTATIVAS_MAPA:
+            db.evento(job_id, "localizacao", "info", f"lote sem nova chamada de IA ({feitas} "
+                      "tentativas já feitas): demarcação pelo pino")
+            raise ia.IAFalhou("limite de tentativas do mapa")
+        alvo, x0, y0, esc = mapa, 0, 0, 1.0
+        if pino:
+            # recorte 2× em volta do pino: no print inteiro a IA pegava o galpão vizinho
+            meia = max(120, int(lado * 1.6))     # galpão precisa de mais área em volta
+            x0 = max(0, min(pino[0] - meia, largura - 2 * meia))
+            y0 = max(0, min(pino[1] - meia, altura - 2 * meia))
+            esc = 2.0
+            zoom = rgb.crop((x0, y0, x0 + 2 * meia, y0 + 2 * meia)).resize(
+                (int(4 * meia), int(4 * meia)), Image.LANCZOS)
+            alvo = mapa.with_name("maps_pino.png")
+            zoom.save(alvo)
+            px, py = (pino[0] - x0) * esc, (pino[1] - y0) * esc
+            instr = (INSTRUCAO_MAPA.replace("maps.png", alvo.name)
+                     + f"\nImagem AMPLIADA em volta do pino. A PONTA do pino vermelho está em "
+                       f"x={px:.0f}, y={py:.0f}. "
+                       + (f"Contorne o GALPÃO e o pátio do lote que contém a ponta do pino; nada de "
+                          f"quarteirão ou galpão vizinho. Ele ocupa ~{lado * 2} px aqui."
+                          if galpao else
+                          "Contorne o LOTE (telhado + quintal até os muros "
+                          "de divisa) que contém a ponta do pino; nada de galpão, quarteirão ou "
+                          f"lote vizinho. Um lote residencial ocupa ~{LADO_LOTE_PX * 2} px aqui."))
+            if dica:
+                instr += "\nO imóvel avaliando: " + dica
+        r = await ia.perguntar(instr, "Demarque o lote do pino.", _Poligono,
+                               arquivos=[alvo], cwd=mapa.parent)
+        pol = sanear([[x0 + p[0] / esc, y0 + p[1] / esc] for p in r.poligono if len(p) >= 2],
+                     largura, altura)
     except ia.IAFalhou as e:
-        db.evento(job_id, "localizacao", "aviso", f"lote não demarcado: {e}")
+        if "limite de tentativas do mapa" not in str(e):
+            db.evento(job_id, "localizacao", "aviso", f"lote não demarcado pela IA: {e}")
         pol = []
-    db.evento(job_id, "localizacao", "resultado", "mapa capturado",
-              dados={"imagem": "maps.png", "poligono": pol})
+    if pino and pol:
+        area = abs(sum(pol[i][0] * pol[i - 1][1] - pol[i - 1][0] * pol[i][1]
+                       for i in range(len(pol)))) / 2
+        cx = sum(p[0] for p in pol) / len(pol)
+        cy = sum(p[1] for p in pol) / len(pol)
+        longe = ((cx - pino[0]) ** 2 + (cy - pino[1]) ** 2) ** 0.5 > 0.9 * lado
+        grande = area > 2.5 * lado ** 2
+        if not _dentro(pino, pol) or longe or grande:
+            motivo = ("não contém o pino" if not _dentro(pino, pol)
+                      else "grande demais para um lote" if grande else "longe do pino")
+            db.evento(job_id, "localizacao", "aviso",
+                      f"polígono da IA {motivo}; demarcado quadrado em volta do pino")
+            pol = []
+    ceramica = telhado_ceramico(dica)
+    solar = "solar" in dica.casefold() or "fotovolt" in dica.casefold()
+    if pino and pol and ceramica and fracao_telhado(rgb, pol, solar) < 0.35:
+        db.evento(job_id, "localizacao", "aviso", "polígono da IA sem telhado cerâmico (a "
+                  "vistoria diz telha cerâmica); lote escolhido pela cor do telhado junto ao pino")
+        pol = []
+    if pino and not pol:
+        pol = lote_por_telhado(rgb, pino, solar) if ceramica else quadrado_no_pino(pino, lado)
+    return pol, list(pino) if pino else None
+
+
+def telhado_ceramico(dica: str) -> bool:
+    """ORDEM 034-5: telha CERÂMICA (barro/colonial/francesa/romana). "Telhas metálicas" (galpão)
+    não é: antes a palavra "telha" bastava e o contorno da IA era trocado pelo quadrado do pino."""
+    d = dica.casefold()
+    if "ceram" in d or "cerâm" in d:
+        return True
+    return "telha" in d and any(k in d for k in ("barro", "colonial", "francesa", "romana", "portuguesa")) \
+        and "metál" not in d and "metal" not in d
+
+
+def _telhado(c, solar: bool) -> bool:
+    """Pixel de telha cerâmica (laranja) ou, se o avaliando tem fotovoltaico, de placa solar."""
+    r, g, b = c[:3]
+    return (r > 120 and r - b > 45 and r - g > 18) or (
+        solar and r < 95 and g < 105 and b < 130 and b >= r)
+
+
+def fracao_telhado(rgb, pol, solar: bool) -> float:
+    xs, ys = [p[0] for p in pol], [p[1] for p in pol]
+    px = rgb.load()
+    tot = hit = 0
+    for y in range(int(min(ys)), int(max(ys)) + 1, 2):
+        for x in range(int(min(xs)), int(max(xs)) + 1, 2):
+            if 0 <= x < rgb.width and 0 <= y < rgb.height and _dentro((x, y), pol):
+                tot += 1
+                hit += _telhado(px[x, y], solar)
+    return hit / tot if tot else 0.0
+
+
+def lote_por_telhado(rgb, pino, solar: bool, lado: int = 60) -> list[list[int]]:
+    """Sem IA: entre os quadrados do tamanho de um lote que contêm a ponta do pino, o de
+    maior fração de telhado cerâmico (+ placas solares). Validado contra o gabarito OV 120."""
+    px = rgb.load()
+    melhor = None
+    for ox in range(-lado + 6, -5, 4):
+        for oy in range(-lado + 6, -5, 4):
+            x0, y0 = pino[0] + ox, pino[1] + oy
+            if x0 < 0 or y0 < 0 or x0 + lado >= rgb.width or y0 + lado >= rgb.height:
+                continue
+            n = sum(_telhado(px[x, y], solar) for y in range(y0, y0 + lado, 2)
+                    for x in range(x0, x0 + lado, 2))
+            if melhor is None or n > melhor[0]:
+                melhor = (n, x0, y0)
+    if melhor is None:
+        return quadrado_no_pino(pino)
+    _, x0, y0 = melhor
+    return [[x0, y0], [x0 + lado, y0], [x0 + lado, y0 + lado], [x0, y0 + lado]]
+
+
+def _dica_imovel(job_id: str) -> str:
+    """Tipo, área do terreno e cobertura (da extração/vistoria) para a IA achar o lote."""
+    cs = {c.nome.casefold(): str(c.valor) for c in db.campos(job_id)
+          if c.origem in ("documento", "vistoria") and c.valor not in (None, "")}
+    partes = []
+    for chave, rot in (("terreno", "terreno"), ("cobertura", "cobertura"), ("tipolog", "tipo"),
+                       ("benfeitoria", "benfeitorias visíveis do alto (ex.: placas solares)"),
+                       ("fotovolt", "sistema fotovoltaico")):
+        v = next((val for k, val in cs.items() if chave in k), "")
+        if v:
+            partes.append(f"{rot}: {v[:120]}")
+    return "; ".join(partes)

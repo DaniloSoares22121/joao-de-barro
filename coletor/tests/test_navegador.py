@@ -69,37 +69,14 @@ def test_capturar_file(tmp_path):
 
 
 def test_url_permitida():
-    ok = ["https://www.zapimoveis.com.br/venda/", "https://www.olx.com.br/d/x",
-          "https://www.google.com/maps/search/x", "https://maps.app.goo.gl/abc",
+    ok = ["https://www.google.com/maps/search/x", "https://maps.app.goo.gl/abc",
           "https://www.google.com.br/maps/place/x"]
-    nao = ["https://evil.com/", "https://zapimoveis.com.br.evil.com/", "https://www.google.com/search",
+    # 112: portal nenhum (a busca automática saiu): só o Google Maps
+    nao = ["https://www.zapimoveis.com.br/venda/", "https://www.olx.com.br/d/x",
+           "https://evil.com/", "https://zapimoveis.com.br.evil.com/", "https://www.google.com/search",
            "file:///c:/x", "javascript:alert(1)", "https://user@olx.com.br.evil.com/"]
     assert all(nv.url_permitida(u) for u in ok)
     assert not any(nv.url_permitida(u) for u in nao)
-
-
-def test_foto_permitida():
-    pg = "https://www.zapimoveis.com.br/imovel/x/"
-    assert nv.foto_permitida("https://resizedimgs.zapimoveis.com.br/a.jpg", pg)
-    assert not nv.foto_permitida("http://resizedimgs.zapimoveis.com.br/a.jpg", pg)
-    assert not nv.foto_permitida("https://evil.com/a.jpg", pg)
-    assert not nv.foto_permitida("https://img.olx.com.br/a.jpg", pg)
-
-
-def test_foto_cdns_vistas_ao_vivo():
-    assert nv.foto_permitida("https://resizedimgs.vivareal.com/img/x.webp",
-                             "https://www.vivareal.com.br/imovel/x/")
-    assert nv.foto_permitida("https://imgbr.imovelwebcdn.com/avisos/1.jpg",
-                             "https://www.imovelweb.com.br/propriedades/x-1.html")
-
-
-def test_webp_vira_jpeg():
-    import io
-    from PIL import Image
-    buf = io.BytesIO()
-    Image.new("RGB", (40, 30), "red").save(buf, "WEBP")
-    assert nv._jpeg_ou_png(buf.getvalue()).startswith(nv.JPEG)
-    assert nv._jpeg_ou_png(b"<svg/>") is None
 
 
 @pytest.mark.parametrize("marcador", [
@@ -183,3 +160,5 @@ def test_redirecionamento_http_fora_da_lista_recusado(tmp_path):
     assert time.monotonic() - t0 < 5, "esperou carregar a página fora da lista"
     assert r["ok"] is False and r["erro"] == "url não permitida"
     assert "texto" not in r and "print_b64" not in r
+
+

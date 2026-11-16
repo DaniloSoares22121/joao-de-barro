@@ -1,45 +1,31 @@
+import { AtalhoEntrega, BaixarRevisao } from './Downloads'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Copy, Plus, Search } from 'lucide-react'
-import { filtrarJobs, prefillDe, statusPresentes } from './campo'
+import { Plus, Search } from 'lucide-react'
+import { filtrarJobs } from './campo'
 import { ApiError, get } from './api'
 import { Esqueleto, Logo } from './Marca'
-import StatusBadge from './StatusBadge'
-import {
-  STATUS_BLOQUEADO, STATUS_PARCIAL, STATUS_PRONTO, dataHoraBR, ehFinal, etapaRotulo, modalidade, statusInfo,
-} from './rotulos'
+import { nomeSolicitante, parado, modalidade } from './rotulos'
 import { useStore } from './store'
 import type { JobResumo } from './tipos'
+import Opcoes, { pedirEdicao } from './Opcoes'
 
 const ATUALIZA_MS = 10_000
 
-/** Contadores do topo: quantos trabalhos em cada situação. */
-function Resumo({ jobs }: { jobs: JobResumo[] }) {
-  const conta = (f: (j: JobResumo) => boolean) => jobs.filter(f).length
-  const itens = [
-    { rotulo: 'Em andamento', n: conta((j) => !ehFinal(j.status)), cor: 'text-sky-700' },
-    { rotulo: 'Prontos para revisão', n: conta((j) => j.status === STATUS_PRONTO), cor: 'text-emerald-700' },
-    { rotulo: 'Com pendências', n: conta((j) => j.status === STATUS_PARCIAL || j.status === STATUS_BLOQUEADO), cor: 'text-amber-700' },
-    { rotulo: 'Total', n: jobs.length, cor: 'text-stone-900' },
-  ]
-  return (
-    <dl className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {itens.map((i) => (
-        <div key={i.rotulo} className="cartao px-4 py-3">
-          <dt className="text-xs text-stone-500">{i.rotulo}</dt>
-          <dd className={`mt-0.5 text-2xl font-semibold tabular-nums ${i.cor}`}>{i.n}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
+/** Próximo passo que depende do avaliador (o resto é o sistema trabalhando ou já acabou). */
+const QUIETOS = ['O JdB está montando', 'Concluído', 'Laudo concluído ✓', 'Cancelado', '']
+export const ehVez = (p?: string) => !QUIETOS.includes(p ?? '') && !(p ?? '').startsWith('Aguardando')
+const ETAPAS_L1 = ['Proposta', 'Contrato', 'Visita', 'Laudo']      // 178: a assinatura saiu do sistema
+interface Cli { id: string; nome: string; imovel: string; etapa: string; proximo: string; job_id: string; modalidade: string }
+const ROT_CLI: Record<string, string> = { proposta: 'Proposta', contrato: 'Contrato', visita: 'Visita', laudo: 'Laudo', assinatura: 'Laudo' }
+const MOD_CLI: Record<string, string> = { OV: 'Opinião de Valor', AM: 'PTAM', AM_GARANTIA: 'PTAM garantia', AMJ: 'PTAM judicial' }
+const primeiraMaiuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 export default function Lista() {
   const ir = useStore((s) => s.ir)
-  const novoAPartir = useStore((s) => s.novoAPartir)
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState('')
   const [jobs, setJobs] = useState<JobResumo[] | null>(null)
   const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
 
   const carregar = useCallback(async () => {
     try {
@@ -55,7 +41,7 @@ export default function Lista() {
   useEffect(() => { void carregar() }, [carregar])
 
   // Atualiza sozinho enquanto houver trabalho em andamento (e ao voltar para a aba).
-  const emAndamento = !!jobs?.some((j) => !ehFinal(j.status))
+  const emAndamento = !!jobs?.some((j) => !parado(j.status))
   useEffect(() => {
     if (!emAndamento) return
     const t = setInterval(() => { if (document.visibilityState !== 'hidden') void carregar() }, ATUALIZA_MS)
@@ -67,148 +53,150 @@ export default function Lista() {
     return () => document.removeEventListener('visibilitychange', aoVoltar)
   }, [carregar])
 
-  const visiveis = useMemo(() => (jobs ? filtrarJobs(jobs, busca, filtro) : []), [jobs, busca, filtro])
-  const chips = useMemo(() => (jobs ? statusPresentes(jobs) : []), [jobs])
-  // O filtro escolhido pode deixar de existir quando o trabalho muda de status.
-  useEffect(() => { if (filtro && !chips.includes(filtro)) setFiltro('') }, [filtro, chips])
-  const copiar = (j: JobResumo) => novoAPartir(prefillDe(j as unknown as Record<string, unknown>))
+  const [aba, setAba] = useState<'andamento' | 'concluidos'>('andamento')
+  // ORDEM 053 / 054 item 5: cliente ainda sem trabalho (Proposta, Contrato, Visita) vira card da L1
+  const [clientes, setClientes] = useState<Cli[]>([])
+  useEffect(() => { get<{ clientes: Cli[] }>('/clientes').then((r) => setClientes(r.clientes.filter((c) => !c.job_id))).catch(() => undefined) }, [])
+  const cliVis = aba === 'andamento' ? clientes.filter((c) => !busca || `${c.nome} ${c.imovel}`.toLowerCase().includes(busca.toLowerCase())) : []
+  const eu = useEu()
+  const concluido = (j: JobResumo) => j.proximo === 'Concluído' || j.proximo === 'Cancelado'
+  const daAba = useMemo(() => (jobs ?? []).filter((j) => (aba === 'concluidos') === concluido(j)), [jobs, aba])
+  const visiveis = useMemo(() => filtrarJobs(daAba, busca, ''), [daAba, busca])
+  const precisam = (jobs ?? []).filter((j) => ehVez(j.proximo)).length + clientes.length
+  const abrir = (j: JobResumo) => ir(j.proximo === 'Escolher referenciais' ? 'alinhamento' : 'job', j.id)
+  const h = new Date().getHours()
+  const saudacao = (h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite') + (eu ? ', ' + eu : '')
 
   return (
-    <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="tela-simples tela-larga">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titulo-pag">Trabalhos</h1>
-          <p className="text-sm text-stone-500">Avaliações em andamento e concluídas.</p>
+          <h1 className="titulo-jdb">{saudacao}</h1>
+          <p className="sub-jdb">{precisam ? `${precisam} ${precisam === 1 ? 'trabalho precisa' : 'trabalhos precisam'} de você.` : 'Nenhum trabalho esperando você.'}</p>
         </div>
-        <button className="btn shrink-0" onClick={() => ir('novo')}>
-          <Plus size={16} aria-hidden="true" /> Novo trabalho
+        <button className="btn-verde so-computador" style={{ width: 'auto' }} onClick={() => ir('novo')}>
+          <Plus size={20} aria-hidden="true" /> Novo trabalho
         </button>
       </div>
 
       {erro && (
-        <div className="faixa-erro mb-4 flex items-center justify-between gap-3" role="alert">
+        <p className="aviso-impede flex items-center justify-between gap-3" role="alert">
           <span>{erro}</span>
-          <button className="btn-sec btn-peq" onClick={() => void carregar()}>Tentar de novo</button>
-        </div>
+          <button className="btn-sec-grande" style={{ width: 'auto' }} onClick={() => void carregar()}>Tentar de novo</button>
+        </p>
       )}
-
+      {aviso && (
+        <p className="aviso-simples flex items-start justify-between gap-3" role="status">
+          <span>{aviso}</span>
+          <button className="link-discreto shrink-0" onClick={() => setAviso('')}>Fechar</button>
+        </p>
+      )}
       {jobs === null && !erro && <Esqueleto linhas={4} rotulo="Carregando os trabalhos…" />}
 
-      {jobs !== null && jobs.length === 0 && (
-        <div className="cartao-pad py-12 text-center">
-          <div className="mb-3 flex justify-center"><Logo size={48} /></div>
-          <p className="text-base font-semibold text-stone-900">Nenhum trabalho ainda</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-stone-500">
-            Crie o primeiro trabalho: informe os dados do imóvel, envie os documentos e o João de Barro monta o laudo.
-          </p>
-          <button className="btn mt-4" onClick={() => ir('novo')}><Plus size={16} aria-hidden="true" /> Novo trabalho</button>
+      {/* 072-B: "Nenhum trabalho ainda" só sem trabalho E sem cliente (cliente sem trabalho é card, 053-C) */}
+      {jobs !== null && jobs.length === 0 && clientes.length === 0 && (
+        <div className="cartao-pad grid justify-items-center gap-3 py-10 text-center">
+          <Logo size={72} />
+          <p className="cartao-titulo">Nenhum trabalho ainda</p>
+          <p className="texto">Crie o primeiro: informe o imóvel e envie os documentos.</p>
+          <button className="btn-verde" style={{ width: 'auto' }} onClick={() => ir('novo')}><Plus size={20} aria-hidden="true" /> Novo trabalho</button>
         </div>
       )}
 
-      {jobs !== null && jobs.length > 0 && (
+      {jobs !== null && (jobs.length > 0 || clientes.length > 0) && (
         <>
-          <Resumo jobs={jobs} />
-          <div className="mb-3 space-y-2">
-            <label htmlFor="busca" className="sr-only">Buscar trabalhos</label>
-            <div className="relative">
-              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" aria-hidden="true" />
-              <input id="busca" type="search" className="input pl-9" placeholder="Buscar por nº, cliente ou bairro"
-                     value={busca} onChange={(e) => setBusca(e.target.value)} autoComplete="off" />
+          <div className="filtros-l1">
+            <div className="abas-l1" role="tablist" aria-label="Trabalhos">
+              <button type="button" role="tab" aria-selected={aba === 'andamento'} onClick={() => setAba('andamento')}>Em andamento</button>
+              <button type="button" role="tab" aria-selected={aba === 'concluidos'} onClick={() => setAba('concluidos')}>Concluídos</button>
+              <button type="button" role="tab" aria-selected={false} onClick={() => ir('propostas')}>Propostas</button>
             </div>
-            {chips.length > 1 && (
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por status">
-                {['', ...chips].map((st) => (
-                  <button key={st || 'todos'} type="button" aria-pressed={filtro === st}
-                          onClick={() => setFiltro(st)}
-                          className={`toque foco rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                            filtro === st ? 'border-barro bg-barro-claro text-barro' : 'border-stone-300 bg-white text-stone-600 hover:border-stone-400'}`}>
-                    {st ? statusInfo(st).texto : 'Todos'}
-                    <span className="ml-1.5 tabular-nums opacity-70">
-                      {st ? jobs.filter((j) => j.status === st).length : jobs.length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="busca-l1">
+              <Search size={20} aria-hidden="true" />
+              <label htmlFor="busca" className="sr-only">Buscar endereço ou cliente</label>
+              <input id="busca" type="search" placeholder="Buscar endereço ou cliente" value={busca}
+                     onChange={(e) => setBusca(e.target.value)} autoComplete="off" />
+            </div>
           </div>
-          {visiveis.length === 0 && (
-            <div className="cartao-pad py-8 text-center text-sm text-stone-500" role="status">
-              Nenhum trabalho encontrado.{' '}
-              <button type="button" className="btn-link" onClick={() => { setBusca(''); setFiltro('') }}>Limpar a busca</button>
-            </div>
+          {visiveis.length === 0 && cliVis.length === 0 && (
+            <p className="texto" role="status">
+              {busca ? 'Nenhum trabalho encontrado. ' : aba === 'concluidos' ? 'Nenhum trabalho concluído ainda.' : 'Nada em andamento.'}
+              {busca && <button type="button" className="link-discreto" onClick={() => setBusca('')}>Limpar a busca</button>}
+            </p>
           )}
-          {/* Telas largas: tabela */}
-          {visiveis.length > 0 && (
-            <div className="cartao hidden overflow-hidden md:block">
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Nº</th><th>Solicitante</th><th>Imóvel</th><th>Modalidade</th><th>Status</th><th>Etapa atual</th><th>Atualizado</th><th><span className="sr-only">Ações</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visiveis.map((j) => (
-                    <tr key={j.id} tabIndex={0} role="link"
-                        aria-label={`Abrir trabalho ${j.numero}`}
-                        onClick={() => ir('job', j.id)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') ir('job', j.id) }}
-                        className="cursor-pointer transition-colors hover:bg-stone-50 focus-visible:bg-barro-claro focus-visible:outline-none">
-                      <td className="font-semibold tabular-nums text-stone-900">{j.numero}</td>
-                      <td className="font-medium text-stone-900">{j.cliente || '—'}</td>
-                      <td>
-                        <div>{j.tipo || '—'}</div>
-                        <div className="text-xs text-stone-500">{[j.bairro, j.cidade].filter(Boolean).join(' · ')}</div>
-                      </td>
-                      <td className="whitespace-nowrap text-stone-600">{modalidade(j.modalidade)}</td>
-                      <td><StatusBadge status={j.status} /></td>
-                      <td className="text-stone-600">{ehFinal(j.status) ? '—' : etapaRotulo(j.etapa)}</td>
-                      <td className="whitespace-nowrap text-xs text-stone-500">{dataHoraBR(j.atualizado)}</td>
-                      <td>
-                        <button type="button" className="btn-link inline-flex items-center gap-1 whitespace-nowrap text-xs"
-                                onClick={(e) => { e.stopPropagation(); copiar(j) }}
-                                onKeyDown={(e) => e.stopPropagation()}
-                                aria-label={`Novo trabalho a partir do nº ${j.numero}`}
-                                title="Cria um trabalho novo já com solicitante, tipo, bairro e modalidade deste">
-                          <Copy size={13} aria-hidden="true" /> Novo a partir deste
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Celular: cartões */}
-          <ul className="space-y-3 md:hidden">
-            {visiveis.map((j) => (
-              <li key={j.id}>
-                <button onClick={() => ir('job', j.id)}
-                        className="cartao-pad foco relative block w-full pr-9 text-left transition-colors hover:bg-stone-50">
-                  <ChevronRight size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-300" aria-hidden="true" />
-                  <span className="block text-base font-semibold text-stone-900">
-                    Nº {j.numero} <span className="font-normal text-stone-600">· {j.cliente || '—'}</span>
-                  </span>
-                  <span className="mt-0.5 block text-sm text-stone-600">
-                    {j.tipo || '—'}{j.bairro ? ` · ${j.bairro}` : ''}{j.cidade ? ` · ${j.cidade}` : ''}
-                  </span>
-                  <span className="mt-2 flex flex-wrap items-center gap-2">
-                    <StatusBadge status={j.status} />
-                    <span className="text-xs text-stone-500">{modalidade(j.modalidade)}</span>
-                  </span>
-                  <span className="mt-2 block text-xs text-stone-500">
-                    {ehFinal(j.status) ? `Atualizado em ${dataHoraBR(j.atualizado)}` : `Etapa: ${etapaRotulo(j.etapa)}`}
-                  </span>
-                </button>
-                <button type="button" className="btn-link toque mt-1 inline-flex items-center gap-1 text-sm"
-                        onClick={() => copiar(j)} aria-label={`Novo trabalho a partir do nº ${j.numero}`}>
-                  <Copy size={14} aria-hidden="true" /> Novo a partir deste
-                </button>
-              </li>
-            ))}
+          <ul className="lista-cartoes">
+            {cliVis.map((c) => {
+              const k = Math.max(0, ETAPAS_L1.indexOf(ROT_CLI[c.etapa] ?? 'Proposta'))
+              return (
+                <li key={`c-${c.id}`}>
+                  <div className="cartao-l1 vez" role="link" tabIndex={0} aria-label={`Abrir conversa: ${c.nome}`}
+                       onClick={() => ir('cliente', c.id)} onKeyDown={(e) => { if (e.key === 'Enter') ir('cliente', c.id) }}>
+                    <span className="cartao-titulo">{c.imovel ? c.imovel.charAt(0).toUpperCase() + c.imovel.slice(1) : 'Imóvel ainda não informado'}</span>
+                    <span className="cartao-sub">{[c.nome, MOD_CLI[c.modalidade] ?? ''].filter(Boolean).join(' · ')}</span>
+                    <span className="pontos-l1" aria-label={`Etapa: ${ETAPAS_L1[k]}`}>
+                      {ETAPAS_L1.map((e, x) => <span key={e} aria-hidden="true" className={`ponto ${x < k ? 'ponto-ok' : x === k ? 'ponto-now' : ''}`} />)}
+                      <span className="etapa-l1">{ETAPAS_L1[k]}</span>
+                    </span>
+                    <button type="button" className="btn-verde" style={{ width: 'auto' }} onClick={(e) => { e.stopPropagation(); ir('cliente', c.id) }}>
+                      {c.proximo && c.proximo !== 'Nada pendente' ? primeiraMaiuscula(c.proximo) : 'Abrir a conversa'}</button>
+                  </div>
+                </li>
+              )
+            })}
+            {visiveis.map((j) => {
+              const tipo = j.objeto_parte || j.tipo || ''                                   // 071-C7: um formato só, "Casa · Jardim Curitiba"
+              const imovel = [tipo.charAt(0).toUpperCase() + tipo.slice(1), j.bairro].filter(Boolean).join(' · ') || 'Imóvel sem descrição'
+              const vez = ehVez(j.proximo)
+              const etapa = j.etapa_tela || 'Laudo'
+              const k = Math.max(0, ETAPAS_L1.indexOf(etapa))
+              return (
+                <li key={j.id}>
+                  <div className={`cartao-l1 ${vez ? 'vez' : ''}`} role="link" tabIndex={0} aria-label={`Abrir trabalho ${j.numero}: ${imovel}`}
+                       onClick={() => abrir(j)} onKeyDown={(e) => { if (e.key === 'Enter') abrir(j) }}>
+                    <span className="titulo-com-opcoes">
+                      <span className="cartao-titulo">{imovel}</span>
+                      <Opcoes job={j} titulo={imovel} entregue={!!j.entregue}
+                              aoEditar={() => { pedirEdicao(j.id); ir('job', j.id) }}
+                              aoApagado={(m) => { setAviso(m); void carregar() }} />
+                    </span>
+                    <span className="cartao-sub">{[nomeSolicitante(j.cliente), modalidade(j.modalidade)].filter(Boolean).join(' · ')}</span>
+                    <span className="pontos-l1" aria-label={`Etapa: ${etapa}`}>
+                      {ETAPAS_L1.map((e, x) => {
+                        const st = j.etapas_st?.[x] ?? (x < k ? 'feito' : x === k ? 'atual' : '')
+                        return <span key={e} aria-hidden="true" className={`ponto ${st === 'feito' ? 'ponto-ok' : st === 'atual' ? 'ponto-now' : st === 'fora' ? 'ponto-fora' : ''}`} />
+                      })}
+                      <span className="etapa-l1">{etapa}</span>
+                      {j.etapas_st?.[3] === 'feito' && (   // 152-3: o laudo aprovado ganha o ✓ no cartão do trabalho
+                        <span className="tag-contorno" style={{ color: '#14803F', borderColor: '#14803F', marginLeft: 8 }}>✓ Concluído</span>
+                      )}
+                      {j.etapas_st?.[3] === 'feito' && (   // 166-3: atalho da entrega (só depois do ✓)
+                        <span style={{ marginLeft: 8 }}><AtalhoEntrega jobId={j.id} titulo={imovel} /></span>
+                      )}
+                      {j.etapa === 'entrega' && j.etapas_st?.[3] !== 'feito' && /PRONTO|PARCIAL/.test(j.status || '') && (
+                        // 172-2: o mesmo [Baixar para a revisão humana] no cartão (conclui e baixa o Word)
+                        <span style={{ marginLeft: 8 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                          <BaixarRevisao jobId={j.id} compacto aoConcluir={() => void carregar()} /></span>
+                      )}
+                    </span>
+                    {vez
+                      ? <button type="button" className="btn-verde" style={{ width: 'auto' }} onClick={(e) => { e.stopPropagation(); abrir(j) }}>{j.proximo}</button>
+                      : j.proximo ? <span className="espera-l1">{j.proximo}</span> : null}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </>
       )}
     </section>
   )
+}
+
+/** Primeiro nome do avaliador para o "Bom dia" (L1). */
+function useEu(): string {
+  const [n, setN] = useState('')
+  useEffect(() => {
+    get<{ dados?: { nome?: string } }>('/avaliadores/eu').then((r) => setN(String(r.dados?.nome || '').split(/\s+/)[0] || '')).catch(() => undefined)
+  }, [])
+  return n
 }

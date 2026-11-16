@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Opções – Enviar ao JdB</title>
+  <style>
+    body { font: 14px/1.5 system-ui, Segoe UI, Arial, sans-serif; max-width: 520px; margin: 24px auto; color: #292524; }
+    h1 { font-size: 18px; color: #a0522d; }
+    label { display: block; margin-top: 12px; font-size: 13px; color: #57534e; }
+    input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d6d3d1; border-radius: 6px; font: inherit; }
+    button { margin-top: 12px; padding: 8px 14px; border: 0; border-radius: 8px; background: #a0522d; color: #fff; font-weight: 600; cursor: pointer; }
+    .nota { font-size: 12px; color: #78716c; }
+    #msg { margin-top: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Enviar ao JdB — Opções</h1>
+  <label for="servidor">Endereço do sistema</label>
+  <input id="servidor" placeholder="https://joaodebarro.brixly.com.br">
+  <p class="nota">Padrão: <code>https://joaodebarro.brixly.com.br</code>. Para testar no PC: <code>http://localhost:8866</code>. Trocar o endereço pede entrar de novo.</p>
+  <button id="salvar">Salvar</button>
+  <div id="msg" role="status"></div>
+  <script src="opcoes.js"></script>
+</body>
+</html>

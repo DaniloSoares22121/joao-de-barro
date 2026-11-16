@@ -29,23 +29,9 @@ def _ler(id_: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# Laudos reais usados como referência de estilo. Têm dados de clientes, por isso ficam fora
-# do repositório: se você tiver os arquivos, copie para assets/conhecimento (estão no
-# .gitignore). Sem eles a redação usa os trechos anonimizados de exemplos_secoes.json.
-OPCIONAIS = {"A1", "A2", "P8"}
-
-
 def texto(*ids: str) -> str:
-    """Concatena os documentos pedidos, cada um sob um cabeçalho com seu id. Os laudos de
-    referência (OPCIONAIS) são pulados quando não estão na pasta."""
-    partes = []
-    for i in ids:
-        try:
-            partes.append(f"===== {i} =====\n{_ler(i).strip()}")
-        except KeyError:
-            if i not in OPCIONAIS:
-                raise
-    return "\n\n".join(partes)
+    """Concatena os documentos pedidos, cada um sob um cabeçalho com seu id."""
+    return "\n\n".join(f"===== {i} =====\n{_ler(i).strip()}" for i in ids)
 
 
 def _linhas_tabela(md: str) -> list[list[str]]:
@@ -118,3 +104,90 @@ def normas_vigentes() -> list[dict]:
         d["itens"] = json.loads(d.pop("itens_json"))
         out.append(d)
     return out
+
+
+# ------------------------------------------------------------------ K0 / K2 (ORDEM 038)
+# K0 = camada geral (igual para todo avaliador); K2 = camada do avaliador (Alan). No lugar do
+# P0 inteiro, a IA recebe só "Como usar" + K0.1 (princípios) + as partes da ETAPA PRINCIPAL
+# da chamada (a 1ª etapa pedida), para não subir o custo. K1 vira fichas (fichas.py); K3 fica
+# guardado para a tela de entrada de avaliador novo (fase futura, não usado aqui).
+IDENTIDADE = ("Você é o JOÃO DE BARRO, agente técnico de avaliação imobiliária. Trabalha para o "
+              "avaliador descrito na camada do avaliador (K2). Nos documentos, tom 100% técnico e "
+              "profissional, em português do Brasil. Use a base geral (K0) e as fichas abaixo; o que "
+              "não estiver nelas e não vier de fonte oficial: diga que ainda não tem base.")
+K0_DA_ETAPA = {
+    "documentos": ("K0.3", "K0.4"), "áreas": ("K0.4",), "vistoria": ("K0.5",), "fotos": ("K0.5",),
+    "localização": ("K0.5",), "pesquisa": ("K0.6",), "cálculo": ("K0.7",),
+    "redação": ("K0.2", "K0.8"), "revisão": ("K0.9",), "proposta/contrato": ("K0.10",),
+}
+K2_DA_ETAPA = {"redação": ("Laudos",), "revisão": ("Laudos",), "cálculo": ("Laudos",),
+               "proposta/contrato": ("Comercial",)}
+
+
+def _secoes(md: str, padrao: str) -> dict[str, str]:
+    """{título curto: texto} das seções "## ..." do markdown; "intro" = antes da 1ª seção."""
+    partes = re.split(r"\n(?=## )", md)
+    out = {"intro": partes[0].strip()}
+    for p in partes[1:]:
+        m = re.match(padrao, p)
+        if m:
+            out[m.group(1)] = p.strip()
+    return out
+
+
+def _principais(etapas) -> list[str]:
+    """Etapa principal (a 1ª); a seleção (pesquisa + cálculo) leva também o cálculo."""
+    if not etapas:
+        return []
+    out = [etapas[0]]
+    if etapas[0] == "pesquisa" and "cálculo" in etapas:
+        out.append("cálculo")
+    return out
+
+
+def k0_secoes() -> dict[str, str]:
+    s = _secoes(_ler("K0"), r"## (K0\.\d+|Como usar)")
+    return s
+
+
+def k0(etapas: tuple[str, ...] | list[str] = ()) -> str:
+    """K0 para a chamada: "Como usar" + K0.1 + as partes da etapa principal (etapas[0]).
+    Sem etapa: o K0 inteiro."""
+    s = k0_secoes()
+    if not etapas:
+        return _ler("K0").strip()
+    pedidas = ["Como usar", "K0.1"] + [x for e in _principais(etapas) for x in K0_DA_ETAPA.get(e, ())]
+    return "\n\n".join(s[k] for k in dict.fromkeys(pedidas) if k in s)
+
+
+def k2(etapas: tuple[str, ...] | list[str] = ()) -> str:
+    """Camada do avaliador (Alan): identificação sempre; padrões de laudo ou comercial conforme
+    a etapa principal. Vale acima da K0, salvo conflito com fonte oficial."""
+    s = _secoes(_ler("K2"), r"## (Identificação|Identidade visual|Laudos|Comercial|Rede|Como ele)")
+    pedidas = ["Identificação"] + [x for e in _principais(etapas) for x in K2_DA_ETAPA.get(e, ())]
+    return "\n\n".join(s[k] for k in pedidas if k in s)
+
+
+def geral(etapas: tuple[str, ...] | list[str] = ()) -> str:
+    """O que substitui o P0: identidade curta + K0 da etapa + K2 (camada do avaliador)."""
+    return (f"===== IDENTIDADE =====\n{IDENTIDADE}\n\n===== K0 — BASE GERAL (partes da etapa) =====\n"
+            f"{k0(etapas)}\n\n===== K2 — CAMADA DO AVALIADOR =====\n{k2(etapas)}")
+
+
+def base(job_id: str, docs: tuple[str, ...], etapas: tuple[str, ...] = ()) -> str:
+    """ORDEM 026-F1: o que a IA recebe — os documentos fixos pedidos SEM o P3 inteiro, mais as
+    fichas do caso (tipo de imóvel, modalidade e etapa) na ordem de busca. Sem fichas
+    importadas (base vazia), cai no P3 inteiro como antes.
+    ORDEM 038: o P0 é trocado pelo K0 da etapa + K2 (`geral`)."""
+    from . import fichas
+    usa_k0 = "P0" in docs
+    docs = tuple(d for d in docs if d != "P0")
+    resto = tuple(d for d in docs if d != "P3")
+    try:
+        bloco = fichas.texto_ia_job(job_id, etapas) if fichas.todas(incluir_inativas=False) else ""
+    except Exception:
+        bloco = ""
+    cab = geral(etapas) + "\n\n" if usa_k0 else ""
+    if not bloco:
+        return cab + texto(*docs) if docs else cab.strip()
+    return cab + (texto(*resto) + "\n\n" if resto else "") + bloco

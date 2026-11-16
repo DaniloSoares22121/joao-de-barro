@@ -30,6 +30,7 @@ export async function testes(): Promise<Falha[]> {
   igual(f, '#/job/id', lerHash('#/job/ab%2Fc'), { tela: 'job', jobId: 'ab/c' })
   igual(f, '#/job sem id', lerHash('#/job/'), { tela: 'lista', jobId: null })
   igual(f, 'lixo', lerHash('#/xyz'), { tela: 'lista', jobId: null })
+  igual(f, '#/configuracoes', lerHash('#/configuracoes'), { tela: 'config', jobId: null })
   for (const [t, id] of [['lista', null], ['novo', null], ['config', null], ['job', 'x y']] as const) {
     igual(f, `ida e volta ${t}`, lerHash(hashDe(t, id)), { tela: t, jobId: id })
   }

@@ -1,26 +1,22 @@
-/* Identidade do João de Barro: o ninho de barro (casa do pássaro) e os estados de carregamento. */
+/* ORDEM 052 / D-103: marca do JdB Laudo aprovada pelo Alan (14/11/2026). Só "JdB", nunca o nome
+ * por extenso; os arquivos vêm do pacote do designer (jdb-marca/). Sem esticar, sem sombra nem
+ * contorno; logo horizontal com 120 px ou mais; símbolo sempre com o pássaro (D-113). */
+const MARCA = `${import.meta.env.BASE_URL}jdb-marca/`
 
-/** Marca: ninho de barro em forma de forno, com a entrada lateral. */
-export function Logo({ size = 28 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="shrink-0">
-      <rect width="32" height="32" rx="8" fill="var(--barro)" />
-      <path d="M6.5 23.5c0-8.2 4.1-14.5 9.5-14.5s9.5 6.3 9.5 14.5z" fill="#fbf1e9" />
-      <ellipse cx="16" cy="19.2" rx="3.4" ry="4.3" fill="var(--barro-esc)" />
-      <path d="M5 24h22" stroke="#fbf1e9" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  )
+/** Símbolo do JdB Laudo: SEMPRE com o pássaro (D-113, Alan 14/11 20h05: "a logo é com o passarinho").
+ *  A versão "só ninho" não é mais usada, nem abaixo de 48 px. */
+export function Logo({ size = 48, escuro }: { size?: number; escuro?: boolean }) {
+  // 072-B: sobre fundo escuro (Aço), a versão "escuro" (pernas e base brancas): a "cor" some no escuro
+  return <img src={MARCA + (escuro ? 'jdb-laudo-simbolo-escuro.svg' : 'jdb-laudo-simbolo-cor.svg')} width={size} height={size}
+              alt="" aria-hidden="true" className="shrink-0" />
 }
 
-export function Marca({ grande }: { grande?: boolean }) {
+/** Logo horizontal do JdB Laudo: versão "escuro" sobre o Aço, colorida sobre fundo claro. */
+export function Marca({ grande, claro, largura }: { grande?: boolean; claro?: boolean; largura?: number }) {
+  const w = Math.max(120, largura ?? (grande ? 220 : 168))
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <Logo size={grande ? 40 : 28} />
-      <span className="leading-tight">
-        <span className={`block font-semibold tracking-tight text-stone-900 ${grande ? 'text-2xl' : 'text-base'}`}>João de Barro</span>
-        {grande && <span className="block text-sm text-stone-500">Avaliação de imóveis</span>}
-      </span>
-    </span>
+    <img src={MARCA + (claro ? 'jdb-laudo-horizontal-escuro.svg' : 'jdb-laudo-horizontal-cor.svg')}
+      width={w} height={Math.round((w * 120) / 335)} alt="JdB Laudo" className="logo-jdb" style={{ width: w }} />
   )
 }
 

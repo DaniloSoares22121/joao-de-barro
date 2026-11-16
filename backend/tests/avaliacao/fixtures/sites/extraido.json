@@ -1,0 +1,26 @@
+{
+ "corretor_b.html": {
+  "link": "file:///C:/Users/DELL/joao-de-barro/backend/tests/avaliacao/fixtures/sites/corretor_b.html",
+  "titulo": "Barracão à venda - Setor Exemplo Sul",
+  "preco": 4500000,
+  "area_m2": 1300,
+  "lote_m2": 3887.59,
+  "quartos": null,
+  "suites": null,
+  "bairro": "",
+  "texto": "Barracão à venda - Setor Exemplo Sul\nCorretor Beta - imóveis comerciais\nBarracão à venda - Setor Exemplo Sul\nValor\tR$ 4.500.000\nÁrea construída\t1.300 m²\nTerreno\t3.887,59 m²\nEndereço\tAvenida Exemplo Sul, Qd. 1, Setor Exemplo Sul, Goiânia/GO\n\nBarracão de estrutura metálica, telhas metálicas, piso industrial, 2 docas e área de manobra.\n\nCorretor Beta (site de teste)",
+  "foto_rect": null
+ },
+ "imobiliaria_a.html": {
+  "link": "file:///C:/Users/DELL/joao-de-barro/backend/tests/avaliacao/fixtures/sites/imobiliaria_a.html",
+  "titulo": "Galpão comercial à venda - Polo Empresarial Exemplo",
+  "preco": 5100000,
+  "area_m2": 1650,
+  "lote_m2": 1650,
+  "quartos": null,
+  "suites": null,
+  "bairro": "",
+  "texto": "Galpão comercial à venda - Polo Empresarial Exemplo\nInício | Comprar | Alugar | Anuncie | Contato\nGalpão comercial à venda - Polo Empresarial Exemplo, Goiânia\nR$ 5.100.000,00\n1.650 m²\n4 banheiros\nCódigo AL-3321\n\nGalpão com 1.061,39 m² de área construída, em terreno de 1.650 m², pé-direito de 10 m, docas, escritório e mezanino. Rua Exemplo das Indústrias, nº 100, Polo Empresarial Exemplo.\n\nCondomínio: R$ 0. IPTU: R$ 9.800,00/ano.\n\nImobiliária Alfa (site de teste) - CRECI J-0000 | Política de privacidade",
+  "foto_rect": null
+ }
+}

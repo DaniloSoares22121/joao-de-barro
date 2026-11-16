@@ -45,8 +45,11 @@ class Captura(BaseModel):
     print_path: str | None = None
     fotos: list = []          # URLs (só texto: o servidor NUNCA baixa URL)
     foto_path: str | None = None
+    pagina_path: str | None = None   # D-082: página inteira (prova), Coletor 1.2.0
+    capturado_em: str = ""           # D-082: hora em que a página foi capturada (servidor)
     erro: str | None = None
     status: int | None = None   # HTTP do documento principal (informado pelo coletor)
+    cartoes: list = []          # busca: [{"link","texto"}] dos cartões da página de resultados
 
 ALFABETO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"   # sem 0/O, 1/I/L
 VALIDADE_CODIGO_S = 600
@@ -197,7 +200,14 @@ class Hub:
                       links=list(msg.get("links") or []), fotos=list(msg.get("fotos") or []),
                       erro=None if erro is None else str(erro)[:2000],
                       status=_status(msg.get("status")))
+        cs = msg.get("cartoes")
+        if isinstance(cs, list):
+            cap.cartoes = [{"link": str(x.get("link") or "")[:600], "texto": str(x.get("texto") or "")[:1500]}
+                           for x in cs[:150] if isinstance(x, dict) and x.get("link")]
         cap.print_path = _salvar_imagem(job_id, msg.get("print_b64"), tid)
+        cap.pagina_path = _salvar_imagem(job_id, msg.get("pagina_b64"), f"{tid}-pagina")
+        from datetime import datetime, timezone
+        cap.capturado_em = datetime.now(timezone.utc).isoformat(timespec="seconds")
         fb = msg.get("fotos_b64")
         if isinstance(fb, list) and fb:
             cap.foto_path = _salvar_imagem(job_id, fb[0], f"{tid}-foto")

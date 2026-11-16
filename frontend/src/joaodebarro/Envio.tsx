@@ -14,7 +14,7 @@ export const ZONAS: ReadonlyArray<{ tipo: Tipo; titulo: string; descricao: strin
     descricao: 'Matrícula ou escritura, IPTU, planta, habite-se, notas fiscais de benfeitorias.',
     accept: '.pdf,.doc,.docx,image/*', camera: true },
   { tipo: 'foto', titulo: 'Fotos da vistoria',
-    descricao: 'Marque uma foto como “Fachada (capa)” — senão o João de Barro escolhe.', accept: 'image/*', camera: true },
+    descricao: 'Marque uma foto como “Fachada (capa)” — senão o JdB escolhe.', accept: 'image/*', camera: true },
   { tipo: 'solicitante', titulo: 'Documentos do solicitante',
     descricao: 'RG, CNH, CPF ou contrato social. Entram no laudo com os dados pessoais tarjados.',
     accept: '.pdf,image/*', camera: true },

@@ -53,7 +53,8 @@ export function useEventos(jobId: string | null, aoAtualizar?: () => void) {
         if (typeof ev?.id !== 'number' || ev.id <= maiorId) return
         maiorId = ev.id
         setEventos((es) => [...es, ev])
-        if (ev.nivel === 'resultado') atualizar()
+        // "lista": a pesquisa montou/ampliou a lista de candidatos.
+        if (ev.nivel === 'resultado' || ev.nivel === 'lista') atualizar()
       }
       s.onerror = () => { try { s.close() } catch { /* já fechado */ } }
       s.onclose = (e) => {

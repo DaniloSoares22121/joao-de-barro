@@ -10,9 +10,12 @@ import pymupdf
 import pytest
 from PIL import Image
 
-from lovable.avaliacao import db, docx_builder, planilha, fonte_mercado, ia, nomes, orquestrador, pdf
+from lovable.avaliacao import db, docx_builder, planilha, fonte_mercado, ia, nomes, orquestrador, pdf  # noqa: F401
 from lovable.avaliacao.agentes import extracao, pesquisa, redacao, revisor, selecao, triagem
-from lovable.avaliacao.modelos import Trabalho
+
+
+_REFS: list = [None]   # 112: os anúncios do teste (o avaliador traz pela extensão; não há mais busca nos portais)
+from lovable.avaliacao.modelos import Referencial, Trabalho
 
 from .textos_ok import SECOES_OV
 from tests.avaliacao.conftest import numero_livre
@@ -31,6 +34,16 @@ def _img(p: Path, cor, tam=(1200, 800)):
     Image.new("RGB", tam, cor).save(p)
 
 
+def _mapa(pasta: Path) -> None:
+    """165: o mapa da localização hoje é só o maps.png, com conteúdo (o cinza liso conta como "mapa em branco")."""
+    import random
+    rnd = random.Random(165)
+    im = Image.new("RGB", (1000, 700))
+    im.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256)) for _ in range(1000 * 700)])
+    pasta.mkdir(parents=True, exist_ok=True)
+    im.save(pasta / "maps.png")
+
+
 def _job(com_maps=True) -> str:
     db.init()
     jid = db.criar_job(Trabalho(
@@ -44,8 +57,12 @@ def _job(com_maps=True) -> str:
         db.adicionar_arquivo(jid, f"f{i}.jpg", "foto", f"fotos/f{i}.jpg")
     _img(pasta / "docs" / "iptu.png", "white", (800, 1100))
     db.adicionar_arquivo(jid, "iptu.png", "", "docs/iptu.png")
-    if com_maps:
+    if com_maps:                       # 165: o mapa da localização hoje é só o maps.png (com conteúdo)
         _img(pasta / "maps_satelite.png", "black", (1000, 700))
+        _mapa(pasta)
+    refs = json.loads(Path(_REFS[0] or FIX).read_text(encoding="utf-8"))
+    db.salvar_candidatos(jid, [Referencial.model_validate({**r, "decisao": "entra", "escolhido": True,
+                                                           "fonte_coleta": "avaliador"}) for r in refs])
     return jid
 
 
@@ -59,8 +76,29 @@ def _mock(monkeypatch, refs_json=FIX, revisao=None, bloqueado=False):
     """IA mockada por esquema; devolve o contador de chamadas por esquema."""
     n = Counter()
     fonte_mercado.registrar(_FonteOnline(refs_json))
+    _REFS[0] = refs_json
+    # 112: o avaliador confirma referenciais, unitário, faixa e área na tela (aqui, já confirmado)
+    real_sel = orquestrador._Pipeline._sel
+    # 165: o unitário é o que o avaliador confirma na tela (limite inferior do OV 120)
+    def _sel_confirmada(self):
+        s0 = real_sel(self)
+        from decimal import Decimal as _D
+        return s0.model_copy(update={            # unitário fixo só com a decisão escrita do avaliador, para esta amostra
+            "confirmado": True, "unitario_adotado": s0.unitario_adotado or _D("2735.85"),
+            "justificativa_unitario": s0.justificativa_unitario or "limite inferior",
+            "amostra": selecao.assinatura_amostra(s0.refs)})
+    monkeypatch.setattr(orquestrador._Pipeline, "_sel", _sel_confirmada)
+    # o OV 120 usa o limite inferior (2.735,85) como unitário confirmado pelo avaliador; aqui (sem a tela) ele vale
+    # para todas as etapas que conferem o unitário (cálculo, revisor de matemática, coerência)
+    def _unit_ov120(sel):
+        from decimal import Decimal as _D
+        if sel.unitario_adotado is not None:
+            return sel.unitario_adotado, ""
+        return (_D("2735.85") if len([x for x in sel.refs if x.escolhido]) >= 5 else None), ""
+    monkeypatch.setattr(selecao, "unitario_valido", _unit_ov120)
+    monkeypatch.setattr(orquestrador, "escolha_area", lambda j: {"base": "construida", "campo": "area_construida"})
 
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         n[esquema.__name__ + "@" + esquema.__module__.rsplit(".", 1)[-1]] += 1
         if esquema is triagem.Triagem:
             return esquema(quadro={}, bloqueado=bloqueado, motivo="sem documentos")
@@ -75,6 +113,10 @@ def _mock(monkeypatch, refs_json=FIX, revisao=None, bloqueado=False):
                      "fonte": "docs/iptu.png"},
                     {"nome": "lote", "valor": "29", "origem": "documento",
                      "fonte": "docs/iptu.png"},
+                    # 165: o laudo de hoje exige área do terreno, matrícula e cartório
+                    {"nome": "area_terreno", "valor": 360.0, "unidade": "m2", "origem": "documento",
+                     "fonte": "docs/iptu.png"},
+                    {"nome": "matricula", "valor": "2025", "origem": "documento", "fonte": "docs/iptu.png"},
                     {"nome": "padrao_construtivo", "valor": "simples", "origem": "vistoria",
                      "fonte": "fotos/f1.jpg"},
                     # vistoria do OV 120 (o caso-modelo): fatos que também estão no P8
@@ -88,9 +130,6 @@ def _mock(monkeypatch, refs_json=FIX, revisao=None, bloqueado=False):
                            "ordem": i} for i in range(1, 6)],
                 "documentos": [{"arquivo": "docs/iptu.png", "rotulo_curto": "IPTU 2025",
                                 "rotulo_completo": "Notificação do IPTU 2025"}]})
-        if esquema is pesquisa._Consultas:
-            return esquema.model_validate({"consultas": [
-                {"tipologia": "Sobrado", "bairro": "Jardim Vila Boa", "cidade": "Goiânia"}]})
         if esquema is selecao._RespostaIA:
             cands = db.candidatos(_box[0])
             return esquema.model_validate({
@@ -114,12 +153,12 @@ def _mock(monkeypatch, refs_json=FIX, revisao=None, bloqueado=False):
         pars = [" ".join(re.findall(r"<w:t(?: [^>]*)?>([^<]*)</w:t>", p))
                 for p in re.findall(r"<w:p[ >].*?</w:p>", xml)]
         out = Path(docx).with_suffix(".pdf")
-        with pymupdf.open() as d:
-            pg = d.new_page()
-            y = 40
-            for t in [p for p in pars if "R$" in p][:40]:
-                pg.insert_text((20, y), t[:150], fontsize=6)
-                y += 10
+        with pymupdf.open() as d:       # 165: o texto INTEIRO do Word numa página (a conferência procura extenso etc.)
+            pg, y = d.new_page(), 10
+            for t in [p for p in pars if p.strip()]:
+                for i in range(0, len(t), 300):
+                    pg.insert_text((5, y), t[i:i + 300], fontsize=1)
+                    y += 1.1
             d.save(out)
         return out
     monkeypatch.setattr(pdf, "converter", converter)
@@ -165,12 +204,12 @@ def test_retoma_sem_refazer_ia(monkeypatch):
         _rodar(jid)
     assert db.resultado(jid, "selecao") is not None
     assert db.resultado(jid, "calculo") is None
+    antes = dict(n)                       # 165: a extração hoje lê em 2 chamadas; o que importa é não repetir na retomada
     falhar["sim"] = False
     assert _rodar(jid) == "PRONTO PARA REVISÃO"
-    assert n["Triagem@triagem"] == 1
-    assert n["_RespostaIA@extracao"] == 1
-    assert n["_Consultas@pesquisa"] == 1
-    assert n["_RespostaIA@selecao"] == 1
+    assert n["Triagem@triagem"] == antes["Triagem@triagem"] == 1
+    assert n["_RespostaIA@extracao"] == antes["_RespostaIA@extracao"]
+    assert n["_RespostaIA@selecao"] == antes["_RespostaIA@selecao"] == 1
 
 
 def test_menos_de_cinco(monkeypatch, tmp_path):
@@ -180,9 +219,15 @@ def test_menos_de_cinco(monkeypatch, tmp_path):
     n, box = _mock(monkeypatch, refs_json=p)
     jid = _job()
     box.append(jid)
-    assert _rodar(jid) == "PARCIAL — PENDÊNCIAS"
-    md = (db.pasta(jid) / "entrega" / "pendencias.md").read_text(encoding="utf-8")
-    assert "referenciais" in md
+    # ORDEM 003 (lista de candidatos, D-021): com menos de 5 escolhidos o pipeline NÃO segue
+    # sozinho para um laudo PARCIAL — ele pausa na pesquisa (AGUARDANDO_AVALIADOR) até o
+    # avaliador marcar pelo menos 5 (a tela recusa "Continuar" com menos; completar com menos
+    # semelhantes ou referencial manual, justificando). Antes: laudo PARCIAL com aviso.
+    assert _rodar(jid) == orquestrador.AGUARDANDO
+    assert db.job(jid)["etapa"] == "pesquisa"
+    msgs = [e["msg"] for e in db.eventos_desde(jid, 0)]
+    assert any("no mínimo 5" in m for m in msgs)
+    assert db.resultado(jid, "entrega") is None
 
 
 def test_revisor_reprova_duas_vezes(monkeypatch):
@@ -192,8 +237,8 @@ def test_revisor_reprova_duas_vezes(monkeypatch):
     jid = _job()
     box.append(jid)
     assert _rodar(jid) == "PARCIAL — PENDÊNCIAS"
-    assert n["Textos@redacao"] == 3
-    assert n["Revisao@revisor"] == 3
+    assert n["Textos@redacao"] == orquestrador.MAX_REVISOES      # 165: no máximo 2 rodadas de revisão (ORDEM 010)
+    assert n["Revisao@revisor"] == orquestrador.MAX_REVISOES
     md = (db.pasta(jid) / "entrega" / "pendencias.md").read_text(encoding="utf-8")
     assert "seção 9 fraco" in md
 
@@ -229,24 +274,20 @@ def test_triagem_bloqueada(monkeypatch):
     assert n["_RespostaIA@extracao"] == 0
 
 
-def test_coletor_offline(monkeypatch):
+def test_sem_coletor_nao_espera(monkeypatch):
+    """112: sem busca nos portais, o programa do PC desligado não segura o trabalho (nada de "aguardando o Coletor");
+    com a imagem de localização que já existe, segue até o fim."""
     n, box = _mock(monkeypatch)
     fonte_mercado.registrar(fonte_mercado.FonteFixture(FIX))  # online() = False
     jid = _job()
     box.append(jid)
-    vistos = []
-
-    class _Parou(BaseException):  # interrompe como um cancelamento
-        pass
+    etapas = []
 
     async def sleep(s):
-        vistos.append((s, db.job(jid)["etapa"]))
-        raise _Parou
+        etapas.append(db.job(jid)["etapa"])
     monkeypatch.setattr(orquestrador, "_sleep", sleep)
-    with pytest.raises(_Parou):
-        _rodar(jid)
-    assert vistos == [(60, "aguardando_coletor")]
-    assert n["_Consultas@pesquisa"] == 0
+    assert _rodar(jid) in orquestrador.FINAIS               # chega ao fim (não fica esperando o programa do PC)
+    assert "aguardando_coletor" not in etapas and db.resultado(jid, "entrega") is not None
 
 
 def test_fila_retoma_nao_finalizados(monkeypatch):
@@ -289,7 +330,7 @@ def _revisoes(monkeypatch, seq):
     real = ia.perguntar
     cont = {"i": 0}
 
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         if esquema is revisor.Revisao:
             i = min(cont["i"], len(seq) - 1)
             cont["i"] += 1
@@ -336,8 +377,11 @@ def test_falha_inesperada_e_terminal(monkeypatch):
     jid = _job()
     box.append(jid)
     assert _rodar(jid) == "PARCIAL — PENDÊNCIAS"
-    md = (db.pasta(jid) / "entrega" / "pendencias.md").read_text(encoding="utf-8")
-    assert "falha inesperada na etapa montagem" in md and "planilha corrompida" in md
+    # 165: a falha vira pendência técnica em linguagem simples; o detalhe ("planilha corrompida") fica no registro
+    with db._conn() as c:
+        ev = c.execute("SELECT msg, dados_json FROM av_events WHERE job=? AND etapa='montagem' AND nivel='erro'",
+                       (jid,)).fetchall()
+    assert any("montagem" in m.lower() and "planilha corrompida" in (d or "") for m, d in ev), ev
     j = db.job(jid)
     assert j["etapa"] == "entrega" and j["status"] == "PARCIAL — PENDÊNCIAS"
 
@@ -348,7 +392,7 @@ def test_aviso_corrigido_na_volta_nao_rebaixa(monkeypatch):
     box.append(jid)
 
     def reprova_e_poe_mapa():
-        _img(db.pasta(jid) / "maps_satelite.png", "black", (1000, 700))
+        _mapa(db.pasta(jid))                                      # 165: o mapa de hoje (maps.png com conteúdo)
         return revisor.Revisao(aprovado=False, problemas=[revisor.Problema(
             camada="visual", etapa_responsavel="montagem", descricao="sem mapa")])
     _revisoes(monkeypatch, [reprova_e_poe_mapa, revisor.Revisao(aprovado=True)])
@@ -422,7 +466,7 @@ def test_fila_sobrevive_a_interrupcao_e_limita(monkeypatch):
     real = ia.perguntar
     mortes = []
 
-    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo=""):
+    async def fake(sistema, prompt, esquema, arquivos=[], cwd=None, modelo="", **_kw):
         if esquema is extracao._RespostaIA and cwd and j1 in str(cwd):
             mortes.append(1)
             raise ia.IAFalhou("Command failed with exit code 143 (terminated)")
@@ -442,34 +486,14 @@ def test_fila_sobrevive_a_interrupcao_e_limita(monkeypatch):
         w.cancel()
         return vivo
     assert asyncio.run(main())
-    assert db.resultado(j2, "entrega")["status"] in orquestrador.FINAIS
+    # ORDEM 002/003: o pipeline PAUSA para o avaliador confirmar referenciais/valor
+    # (AGUARDANDO_AVALIADOR) — o j2 sai da fila parado na pausa, sem entrega; o que o teste
+    # garante (a fila sobrevive à morte do j1 e processa o j2) continua valendo.
+    assert db.job(j2)["status"] in orquestrador.FINAIS | {orquestrador.AGUARDANDO}
     fim = db.resultado(j1, "entrega")
     assert len(mortes) == 3
     assert fim["status"] == orquestrador.PARCIAL
     assert any("IA interrompida repetidamente" in p["texto"] for p in fim["pendencias"])
-
-
-def test_coletor_cai_no_meio_da_pesquisa(monkeypatch):
-    from lovable.avaliacao import coletor_hub
-    n, box = _mock(monkeypatch)
-    estado = {"chamadas": 0}
-
-    class _FonteCai(_FonteOnline):
-        async def buscar(self, job_id, consultas):
-            estado["chamadas"] += 1
-            if estado["chamadas"] == 1:
-                raise coletor_hub.ColetorOffline("coletor desconectou")
-            return await super().buscar(job_id, consultas)
-    fonte_mercado.registrar(_FonteCai(FIX))
-    jid = _job()
-    box.append(jid)
-    vistos = []
-
-    async def sleep(s):
-        vistos.append(db.job(jid)["etapa"])
-    monkeypatch.setattr(orquestrador, "_sleep", sleep)
-    assert _rodar(jid) == "PRONTO PARA REVISÃO"
-    assert "aguardando_coletor" in vistos and estado["chamadas"] >= 2
 
 
 def test_maps_falha_nao_aborta_pesquisa(monkeypatch):
@@ -479,13 +503,13 @@ def test_maps_falha_nao_aborta_pesquisa(monkeypatch):
         async def capturar_maps(self, job_id, t):
             raise RuntimeError("pane")
     fonte_mercado.registrar(_FonteMaps(FIX))
-    jid = _job()
+    jid = _job(com_maps=False)
     box.append(jid)
-    asyncio.run(pesquisa.rodar(jid))
+    _rodar(jid)
     assert db.resultado(jid, "pesquisa")["candidatos"]
     avisos = [e["msg"] for e in db.eventos_desde(jid, 0) if e["nivel"] == "aviso"]
-    assert any(a.startswith(docx_builder.SEM_LOCALIZACAO) for a in avisos)
-    assert orquestrador._grave(avisos[-1])
+    sem_loc = [a for a in avisos if a.startswith(docx_builder.SEM_LOCALIZACAO)]
+    assert sem_loc and orquestrador._grave(sem_loc[-1])
 
 
 def test_redacao_abaixo_do_minimo_provoca_volta(monkeypatch):

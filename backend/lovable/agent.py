@@ -1,7 +1,6 @@
-"""Modelos que sempre "pensam": neles o controle é o esforço, não max_thinking_tokens."""
-_PENSA_SEMPRE = ("opus-5-5", "sonnet-5-5", "fable-5", "mythos-5")
+"""Substituto local de lovable.agent: só o que o João de Barro usa."""
 
 
 def _pensa_sempre(modelo: str) -> bool:
-    m = (modelo or "").lower()
-    return any(k in m for k in _PENSA_SEMPRE)
+    """Modelos que não aceitam desligar o raciocínio. Localmente: nenhum."""
+    return False

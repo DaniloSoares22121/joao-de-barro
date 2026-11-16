@@ -176,8 +176,9 @@ def test_modelo_leve_padrao_haiku_5_5_sem_effort(monkeypatch):
     from lovable import config
     import importlib
     monkeypatch.delenv("LOVABLE_LIGHT_MODEL", raising=False)
-    src = (importlib.util.find_spec("lovable.config").origin)
-    assert '"LOVABLE_LIGHT_MODEL", "claude-haiku-5-5"' in open(src, encoding="utf-8").read()
+    # 165: o padrão é conferido pelo valor (o jeito de escrever no config mudou: `get(...) or "claude-haiku-5-5"`)
+    importlib.reload(config)
+    assert config.LIGHT_MODEL == "claude-haiku-5-5"
     monkeypatch.setattr(config, "ESFORCO", "medium")
     opts = ia._opcoes("claude-haiku-5-5", False, None)
     assert getattr(opts, "effort", None) in (None, "")
